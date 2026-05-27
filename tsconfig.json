@@ -20,6 +20,5 @@
       "@/*": ["src/*"]
     }
   },
-  "include": ["src", "index.html"],
-  "references": [{ "path": "./electron/tsconfig.json" }]
+  "include": ["src", "index.html"]
 }

@@ -69,7 +69,6 @@ export function ChartPane({ data, symbol, timeframe }: ChartPaneProps) {
       },
       timeScale: {
         borderColor: border,
-        textColor: fgDim,
         timeVisible: true,
         secondsVisible: false,
       },
