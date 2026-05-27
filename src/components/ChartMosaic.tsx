@@ -9,14 +9,17 @@ import { getPricePrecision } from "../lib/symbols";
 import { logError } from "../lib/eventBus";
 import type { Interval } from "../lib/types";
 import { SymbolPicker } from "./SymbolPicker";
+import { getIndicatorDef } from "../lib/indicators/registry";
 
 export function ChartMosaic() {
   const layout    = useStore((s) => s.layout);
   const cells     = useStore((s) => s.mosaicCells);
   const candles   = useStore((s) => s.candles);
   const tickers   = useStore((s) => s.tickers);
-  const setCandles    = useStore((s) => s.setCandles);
-  const setMosaicCell = useStore((s) => s.setMosaicCell);
+  const setCandles      = useStore((s) => s.setCandles);
+  const setMosaicCell   = useStore((s) => s.setMosaicCell);
+  const addIndicator    = useStore((s) => s.addIndicator);
+  const removeIndicator = useStore((s) => s.removeIndicator);
 
   const [activeCell, setActiveCell] = useState(0);
   const [pickerCell, setPickerCell] = useState<number | null>(null);
@@ -84,8 +87,44 @@ export function ChartMosaic() {
                   ▾
                 </button>
               </div>
-              <div className="chart-host">
-                <ChartPane data={data} symbol={cell.symbol} timeframe={tfLabel(cell.timeframe)} />
+              <div
+                className="chart-host"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  try {
+                    const raw = e.dataTransfer.getData("application/x-indicator");
+                    if (!raw) return;
+                    const parsed = JSON.parse(raw) as { kind: string };
+                    if (!parsed.kind) return;
+                    const def = getIndicatorDef(parsed.kind);
+                    if (!def) return;
+                    addIndicator(i, {
+                      id: crypto.randomUUID(),
+                      kind: parsed.kind,
+                      params: { ...def.defaultParams },
+                      color: def.defaultColor,
+                    });
+                  } catch { /* ignore */ }
+                }}
+              >
+                <ChartPane
+                  data={data}
+                  symbol={cell.symbol}
+                  timeframe={tfLabel(cell.timeframe)}
+                  indicators={cell.indicators}
+                  onAddIndicator={(kind) => {
+                    const def = getIndicatorDef(kind);
+                    if (!def) return;
+                    addIndicator(i, {
+                      id: crypto.randomUUID(),
+                      kind,
+                      params: { ...def.defaultParams },
+                      color: def.defaultColor,
+                    });
+                  }}
+                  onRemoveIndicator={(id) => removeIndicator(i, id)}
+                />
               </div>
             </div>
           );

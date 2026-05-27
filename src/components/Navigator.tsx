@@ -1,3 +1,16 @@
+function dragStart(e: React.DragEvent, kind: string) {
+  e.dataTransfer.setData("application/x-indicator", JSON.stringify({ kind }));
+  e.dataTransfer.effectAllowed = "copy";
+}
+
+const DRAGGABLE_INDICATORS: { label: string; kind: string }[] = [
+  { label: "Moving Average", kind: "sma" },
+  { label: "EMA", kind: "ema" },
+  { label: "RSI", kind: "rsi" },
+  { label: "MACD", kind: "macd" },
+  { label: "Bollinger Bands", kind: "bollinger" },
+];
+
 export function Navigator() {
   return (
     <>
@@ -7,11 +20,17 @@ export function Navigator() {
       </div>
       <div className="nav-tree">
         <div className="nav-cat"><span className="chev">▾</span>📁 Индикаторы</div>
-        <div className="nav-item"><span className="ico">📈</span>Moving Average</div>
-        <div className="nav-item"><span className="ico">📈</span>EMA</div>
-        <div className="nav-item"><span className="ico">📈</span>RSI</div>
-        <div className="nav-item"><span className="ico">📈</span>MACD</div>
-        <div className="nav-item"><span className="ico">📈</span>Bollinger Bands</div>
+        {DRAGGABLE_INDICATORS.map(({ label, kind }) => (
+          <div
+            key={kind}
+            className="nav-item nav-item-draggable"
+            draggable
+            data-indicator-kind={kind}
+            onDragStart={(e) => dragStart(e, kind)}
+          >
+            <span className="ico">📈</span>{label}
+          </div>
+        ))}
         <div className="nav-item"><span className="ico">📈</span>Stochastic</div>
         <div className="nav-item"><span className="ico">📈</span>ATR</div>
         <div className="nav-item"><span className="ico">📈</span>Volume Profile</div>

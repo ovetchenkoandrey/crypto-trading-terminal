@@ -446,6 +446,9 @@ button { font-family: inherit; }
   color: var(--accent);
 }
 .nav-item .badge.running { background: var(--green-soft); color: var(--green); }
+.nav-item-draggable { cursor: grab; }
+.nav-item-draggable:active { cursor: grabbing; }
+.nav-item-draggable:hover { background: var(--bg-hover); outline: 1px dashed var(--border); }
 
 /* ───────────── Terminal (bottom) ───────────── */
 .terminal {
