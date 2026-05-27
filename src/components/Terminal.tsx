@@ -1,25 +1,26 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useStore } from "../lib/store";
+import { fmtPrice, fmtUsdt } from "../lib/format";
+import { getPricePrecision } from "../lib/symbols";
 
 type TabKey = "positions" | "orders" | "history" | "alerts" | "journal";
 
-const TABS: { key: TabKey; label: string; badge?: string }[] = [
-  { key: "positions", label: "Позиции",          badge: "3" },
-  { key: "orders",    label: "Открытые ордера",  badge: "2" },
-  { key: "history",   label: "История сделок" },
-  { key: "alerts",    label: "Алерты",           badge: "1" },
-  { key: "journal",   label: "Журнал" },
-];
-
-const JOURNAL: [string, "ok" | "info" | "warn" | "error", string][] = [
-  ["14:32:18", "ok",    `<span class="h">[bybit-rest]</span> /v5/market/kline → OK, 200 candles received for BTCUSDT.15`],
-  ["14:32:14", "info",  `<span class="h">[chart]</span> ChartPane mounted, rendered 200 candles`],
-  ["14:32:01", "ok",    `<span class="h">[app]</span> приложение запущено, версия 0.1.0`],
-  ["14:32:00", "info",  `<span class="h">[bybit-rest]</span> запрос свечей: symbol=BTCUSDT interval=15 limit=200`],
-  ["14:31:59", "info",  `<span class="h">[ui]</span> MainWindow построен, layout=1×1`],
-];
-
 export function Terminal() {
   const [tab, setTab] = useState<TabKey>("journal");
+
+  const positions  = useStore((s) => s.paperPositions);
+  const allOrders  = useStore((s) => s.paperOrders);
+  const history    = useStore((s) => s.paperHistory);
+  const journal    = useStore((s) => s.journal);
+  const orders     = useMemo(() => allOrders.filter((o) => o.status === "pending"), [allOrders]);
+
+  const TABS: { key: TabKey; label: string; badge?: number }[] = [
+    { key: "positions", label: "Позиции",         badge: positions.length },
+    { key: "orders",    label: "Открытые ордера", badge: orders.length },
+    { key: "history",   label: "История сделок",  badge: history.length },
+    { key: "alerts",    label: "Алерты" },
+    { key: "journal",   label: "Журнал",          badge: journal.length },
+  ];
 
   return (
     <div className="terminal">
@@ -31,129 +32,149 @@ export function Terminal() {
             onClick={() => setTab(t.key)}
           >
             {t.label}
-            {t.badge && <span className="badge">{t.badge}</span>}
+            {t.badge !== undefined && t.badge > 0 && <span className="badge">{t.badge}</span>}
           </button>
         ))}
       </div>
       <div className="term-content">
         {tab === "positions" && <PositionsTable />}
-        {tab === "orders" && <OrdersTable />}
-        {tab === "history" && <HistoryTable />}
-        {tab === "alerts" && <AlertsTable />}
-        {tab === "journal" && <Journal />}
+        {tab === "orders"    && <OrdersTable />}
+        {tab === "history"   && <HistoryTable />}
+        {tab === "alerts"    && <EmptyPlaceholder label="Алертов нет" />}
+        {tab === "journal"   && <Journal />}
       </div>
     </div>
   );
 }
 
+function EmptyPlaceholder({ label }: { label: string }) {
+  return (
+    <div style={{ padding: 24, textAlign: "center", color: "var(--fg-mute)", fontSize: 12 }}>
+      {label}
+    </div>
+  );
+}
+
 function PositionsTable() {
+  const positions = useStore((s) => s.paperPositions);
+  const tickers   = useStore((s) => s.tickers);
+  if (positions.length === 0) return <EmptyPlaceholder label="Открытых позиций нет" />;
   return (
     <table className="term-table">
       <thead>
         <tr>
-          <th>Время</th><th>Символ</th><th>Тип</th>
-          <th>Объём</th><th>Цена входа</th>
-          <th>S/L</th><th>T/P</th>
-          <th>Текущая</th><th>P/L, $</th><th>P/L, %</th>
+          <th>Открыта</th><th>Символ</th><th>Сторона</th>
+          <th>Объём</th><th>Цена входа</th><th>Текущая</th>
+          <th>P/L, $</th><th>P/L, %</th><th>Бот</th>
         </tr>
       </thead>
       <tbody>
-        <tr>
-          <td>14:32:18</td><td>BTCUSDT</td><td style={{ color: "var(--green)" }}>buy</td>
-          <td>0.05</td><td>67 432.50</td><td>66 800.00</td><td>68 500.00</td>
-          <td>67 980.10</td><td className="pnl-pos">+27.38</td><td className="pnl-pos">+0.81%</td>
-        </tr>
-        <tr>
-          <td>12:08:44</td><td>ETHUSDT</td><td style={{ color: "var(--red)" }}>sell</td>
-          <td>0.30</td><td>3 845.20</td><td>3 900.00</td><td>3 750.00</td>
-          <td>3 821.50</td><td className="pnl-pos">+7.11</td><td className="pnl-pos">+0.62%</td>
-        </tr>
-        <tr>
-          <td>09:51:02</td><td>SOLUSDT</td><td style={{ color: "var(--green)" }}>buy</td>
-          <td>2.5</td><td>168.40</td><td>165.00</td><td>175.00</td>
-          <td>166.85</td><td className="pnl-neg">-3.88</td><td className="pnl-neg">-0.92%</td>
-        </tr>
+        {positions.map((p) => {
+          const last = tickers[p.symbol]?.lastPrice ?? p.entryPrice;
+          const precision = getPricePrecision(p.symbol, last);
+          const direction = p.side === "buy" ? 1 : -1;
+          const pnl = (last - p.entryPrice) * p.qty * direction;
+          const pnlPct = ((last - p.entryPrice) / p.entryPrice) * 100 * direction;
+          const cls = pnl >= 0 ? "pnl-pos" : "pnl-neg";
+          return (
+            <tr key={p.id}>
+              <td>{new Date(p.openedTs).toLocaleTimeString("ru-RU", { hour12: false })}</td>
+              <td>{p.symbol}</td>
+              <td style={{ color: p.side === "buy" ? "var(--green)" : "var(--red)" }}>{p.side}</td>
+              <td>{p.qty}</td>
+              <td>{fmtPrice(p.entryPrice, precision)}</td>
+              <td>{fmtPrice(last, precision)}</td>
+              <td className={cls}>{pnl >= 0 ? "+" : ""}{fmtUsdt(pnl)}</td>
+              <td className={cls}>{pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%</td>
+              <td style={{ color: "var(--fg-dim)" }}>{p.botId ?? "—"}</td>
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );
 }
 
 function OrdersTable() {
+  const allOrders = useStore((s) => s.paperOrders);
+  const orders = useMemo(() => allOrders.filter((o) => o.status === "pending"), [allOrders]);
+  if (orders.length === 0) return <EmptyPlaceholder label="Активных ордеров нет" />;
   return (
     <table className="term-table">
-      <thead><tr>
-        <th>Время</th><th>Символ</th><th>Тип</th><th>Сторона</th>
-        <th>Цена</th><th>Размер</th><th>Статус</th>
-      </tr></thead>
+      <thead>
+        <tr>
+          <th>Время</th><th>Символ</th><th>Тип</th>
+          <th>Сторона</th><th>Цена</th><th>Объём</th><th>Бот</th>
+        </tr>
+      </thead>
       <tbody>
-        <tr>
-          <td>14:31:50</td><td>BTCUSDT</td><td>Limit</td>
-          <td style={{ color: "var(--green)" }}>buy</td>
-          <td>67 200.00</td><td>0.02</td>
-          <td style={{ color: "var(--accent)" }}>Pending</td>
-        </tr>
-        <tr>
-          <td>11:14:22</td><td>ETHUSDT</td><td>Stop</td>
-          <td style={{ color: "var(--red)" }}>sell</td>
-          <td>3 900.00</td><td>0.30</td>
-          <td style={{ color: "var(--accent)" }}>Pending</td>
-        </tr>
+        {orders.map((o) => (
+          <tr key={o.id}>
+            <td>{new Date(o.ts).toLocaleTimeString("ru-RU", { hour12: false })}</td>
+            <td>{o.symbol}</td>
+            <td>{o.type}</td>
+            <td style={{ color: o.side === "buy" ? "var(--green)" : "var(--red)" }}>{o.side}</td>
+            <td>{fmtPrice(o.price, getPricePrecision(o.symbol, o.price))}</td>
+            <td>{o.qty}</td>
+            <td style={{ color: "var(--fg-dim)" }}>{o.botId ?? "—"}</td>
+          </tr>
+        ))}
       </tbody>
     </table>
   );
 }
 
 function HistoryTable() {
+  const history = useStore((s) => s.paperHistory);
+  if (history.length === 0) return <EmptyPlaceholder label="История сделок пуста" />;
   return (
     <table className="term-table">
-      <thead><tr>
-        <th>Закрыт</th><th>Символ</th><th>Тип</th>
-        <th>Объём</th><th>Вход</th><th>Выход</th><th>P/L, $</th>
-      </tr></thead>
+      <thead>
+        <tr>
+          <th>Закрыта</th><th>Символ</th><th>Сторона</th>
+          <th>Объём</th><th>Вход</th><th>Выход</th><th>P/L, $</th><th>Бот</th>
+        </tr>
+      </thead>
       <tbody>
-        <tr>
-          <td>27.05 19:14</td><td>BTCUSDT</td>
-          <td style={{ color: "var(--green)" }}>buy</td>
-          <td>0.10</td><td>66 100.00</td><td>67 450.00</td>
-          <td className="pnl-pos">+135.00</td>
-        </tr>
-        <tr>
-          <td>27.05 11:32</td><td>SOLUSDT</td>
-          <td style={{ color: "var(--red)" }}>sell</td>
-          <td>5.0</td><td>171.20</td><td>168.80</td>
-          <td className="pnl-pos">+12.00</td>
-        </tr>
-      </tbody>
-    </table>
-  );
-}
-
-function AlertsTable() {
-  return (
-    <table className="term-table">
-      <thead><tr><th>Создан</th><th>Символ</th><th>Условие</th><th>Состояние</th></tr></thead>
-      <tbody>
-        <tr>
-          <td>14:00:00</td><td>BTCUSDT</td><td>{"Цена > 68 500.00"}</td>
-          <td style={{ color: "var(--accent)" }}>Ожидание</td>
-        </tr>
-        <tr>
-          <td>13:42:15</td><td>SOLUSDT</td><td>{"RSI(14) < 30"}</td>
-          <td style={{ color: "var(--green)" }}>Сработал в 14:18</td>
-        </tr>
+        {history.slice().reverse().map((t) => {
+          const precision = getPricePrecision(t.symbol, t.exitPrice);
+          const cls = t.pnl >= 0 ? "pnl-pos" : "pnl-neg";
+          return (
+            <tr key={t.id}>
+              <td>{new Date(t.ts).toLocaleTimeString("ru-RU", { hour12: false })}</td>
+              <td>{t.symbol}</td>
+              <td style={{ color: t.side === "buy" ? "var(--green)" : "var(--red)" }}>{t.side}</td>
+              <td>{t.qty}</td>
+              <td>{fmtPrice(t.entryPrice, precision)}</td>
+              <td>{fmtPrice(t.exitPrice, precision)}</td>
+              <td className={cls}>{t.pnl >= 0 ? "+" : ""}{fmtUsdt(t.pnl)}</td>
+              <td style={{ color: "var(--fg-dim)" }}>{t.botId ?? "—"}</td>
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );
 }
 
 function Journal() {
+  const journal = useStore((s) => s.journal);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Autoscroll to bottom on new entries
+  useEffect(() => {
+    if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
+  }, [journal.length]);
+
+  if (journal.length === 0) return <EmptyPlaceholder label="Журнал пуст" />;
+
   return (
-    <div className="journal">
-      {JOURNAL.map(([ts, lvl, msg], i) => (
-        <div key={i} className="jrn">
-          <span className="ts">{ts}</span>
-          <span className={"lvl " + lvl}>{lvl.toUpperCase()}</span>
-          <span className="msg" dangerouslySetInnerHTML={{ __html: msg }} />
+    <div className="journal" ref={ref}>
+      {journal.slice(-200).map((e, i) => (
+        <div key={e.ts + "-" + i} className="jrn">
+          <span className="ts">{new Date(e.ts).toLocaleTimeString("ru-RU", { hour12: false })}</span>
+          <span className={"lvl " + e.level}>{e.level.toUpperCase()}</span>
+          <span className="msg"><span className="h">[{e.source}]</span> {e.msg}</span>
         </div>
       ))}
     </div>

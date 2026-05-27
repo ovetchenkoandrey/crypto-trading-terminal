@@ -1,43 +1,51 @@
-interface OrderBookProps {
-  symbol: string;
-  lastPrice?: number;
-}
+import { useStore } from "../lib/store";
+import { fmtPrice, fmtVolume } from "../lib/format";
+import { getPricePrecision } from "../lib/symbols";
 
-interface Level {
-  p: number;
-  q: number;
-  t: number;
-}
+const DEPTH = 12;
 
-function buildBook(mid: number): { asks: Level[]; bids: Level[]; maxQ: number } {
-  let s = 7;
-  const rnd = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
-  const asks: Level[] = [];
-  const bids: Level[] = [];
-  for (let i = 0; i < 11; i++) {
-    const p = mid + (i + 1) * (0.4 + rnd() * 0.8);
-    const q = 0.05 + rnd() * 2.4;
-    asks.push({ p, q, t: p * q });
+export function OrderBook() {
+  const orderbook  = useStore((s) => s.orderbook);
+  const activeSym  = useStore((s) => s.activeSymbol);
+  const ticker     = useStore((s) => s.tickers[activeSym]);
+
+  const symbol = orderbook?.symbol ?? activeSym;
+  const precision = getPricePrecision(symbol, ticker?.lastPrice);
+
+  if (!orderbook || orderbook.symbol !== activeSym) {
+    return (
+      <>
+        <div className="panel-title">
+          <span className="dot" />
+          Стакан · {activeSym}
+          <span className="right">L2</span>
+        </div>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--fg-mute)", fontSize: 11 }}>
+          Ожидание данных…
+        </div>
+      </>
+    );
   }
-  for (let i = 0; i < 11; i++) {
-    const p = mid - 0.4 - i * (0.4 + rnd() * 0.8);
-    const q = 0.05 + rnd() * 2.4;
-    bids.push({ p, q, t: p * q });
-  }
-  const maxQ = Math.max(...asks.map((x) => x.q), ...bids.map((x) => x.q));
-  return { asks, bids, maxQ };
-}
 
-export function OrderBook({ symbol, lastPrice }: OrderBookProps) {
-  const mid = lastPrice ?? 67980.10;
-  const { asks, bids, maxQ } = buildBook(mid);
+  const asks = orderbook.asks.slice(0, DEPTH);
+  const bids = orderbook.bids.slice(0, DEPTH);
+
+  const maxQ = Math.max(
+    1e-9,
+    ...asks.map((l) => l.qty),
+    ...bids.map((l) => l.qty),
+  );
+
+  const spread = asks[0] && bids[0] ? asks[0].price - bids[0].price : 0;
+  const mid = ticker?.lastPrice ?? ((asks[0]?.price ?? 0) + (bids[0]?.price ?? 0)) / 2;
+  const dir = ticker ? (ticker.change24h >= 0 ? "up" : "dn") : "up";
 
   return (
     <>
       <div className="panel-title">
         <span className="dot" />
         Стакан · {symbol}
-        <span className="right">×10</span>
+        <span className="right">L2</span>
       </div>
       <div className="ob-head">
         <span>Цена</span>
@@ -45,32 +53,34 @@ export function OrderBook({ symbol, lastPrice }: OrderBookProps) {
         <span>Сумма</span>
       </div>
       <div className="ob-rows asks">
-        {asks.map((r, i) => (
+        {asks.map((l) => (
           <div
-            key={"a" + i}
+            key={"a" + l.price}
             className="ob-row ask"
-            style={{ "--bar-w": `${(r.q / maxQ * 100).toFixed(0)}%` } as React.CSSProperties}
+            style={{ "--bar-w": `${(l.qty / maxQ * 100).toFixed(0)}%` } as React.CSSProperties}
           >
-            <span className="price">{r.p.toFixed(1)}</span>
-            <span className="qty">{r.q.toFixed(3)}</span>
-            <span className="total">{(r.t / 1000).toFixed(1)}k</span>
+            <span className="price">{fmtPrice(l.price, precision)}</span>
+            <span className="qty">{l.qty.toFixed(4)}</span>
+            <span className="total">{fmtVolume(l.price * l.qty)}</span>
           </div>
         ))}
       </div>
-      <div className="ob-spread">
-        {mid.toFixed(2)}
-        <span className="sub">≈ ${mid.toFixed(2)}</span>
+      <div className={"ob-spread " + dir}>
+        <span style={{ color: dir === "up" ? "var(--green)" : "var(--red)" }}>
+          {fmtPrice(mid, precision)}
+        </span>
+        <span className="sub">spread {spread.toFixed(precision)}</span>
       </div>
       <div className="ob-rows">
-        {bids.map((r, i) => (
+        {bids.map((l) => (
           <div
-            key={"b" + i}
+            key={"b" + l.price}
             className="ob-row bid"
-            style={{ "--bar-w": `${(r.q / maxQ * 100).toFixed(0)}%` } as React.CSSProperties}
+            style={{ "--bar-w": `${(l.qty / maxQ * 100).toFixed(0)}%` } as React.CSSProperties}
           >
-            <span className="price">{r.p.toFixed(1)}</span>
-            <span className="qty">{r.q.toFixed(3)}</span>
-            <span className="total">{(r.t / 1000).toFixed(1)}k</span>
+            <span className="price">{fmtPrice(l.price, precision)}</span>
+            <span className="qty">{l.qty.toFixed(4)}</span>
+            <span className="total">{fmtVolume(l.price * l.qty)}</span>
           </div>
         ))}
       </div>

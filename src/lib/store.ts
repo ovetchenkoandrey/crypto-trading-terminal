@@ -1,0 +1,329 @@
+import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
+import type { Candle } from "./types";
+
+export type PanelKey = "marketWatch" | "orderBook" | "navigator" | "terminal";
+export type PanelsState = Record<PanelKey, boolean>;
+export type LayoutKey = "1" | "2" | "4";
+export type Theme = "dark" | "light";
+
+export interface MosaicCell {
+  symbol: string;
+  timeframe: string;
+  indicators: ActiveIndicator[];
+}
+
+export interface ActiveIndicator {
+  id: string;             // unique instance id
+  kind: string;           // e.g. "sma", "ema", "rsi"
+  params: Record<string, number | string>;
+  color?: string;
+}
+
+export interface Ticker {
+  symbol: string;
+  lastPrice: number;
+  bid1: number;
+  ask1: number;
+  change24h: number;
+  high24h: number;
+  low24h: number;
+  volume24h: number;
+  updatedAt: number;
+}
+
+export interface OrderbookLevel {
+  price: number;
+  qty: number;
+}
+
+export interface Orderbook {
+  symbol: string;
+  asks: OrderbookLevel[];     // sorted ascending by price
+  bids: OrderbookLevel[];     // sorted descending by price
+  updatedAt: number;
+}
+
+export interface JournalEntry {
+  ts: number;
+  level: "info" | "ok" | "warn" | "error";
+  source: string;
+  msg: string;
+}
+
+// Paper trading (E1D)
+export type Side = "buy" | "sell";
+export type OrderType = "market" | "limit" | "stop";
+export type OrderStatus = "pending" | "filled" | "cancelled";
+
+export interface PaperOrder {
+  id: string;
+  ts: number;
+  symbol: string;
+  side: Side;
+  type: OrderType;
+  price: number;            // limit price (for limit/stop)
+  qty: number;
+  status: OrderStatus;
+  filledPrice?: number;
+  filledTs?: number;
+  botId?: string;            // owning bot, if any
+}
+
+export interface PaperPosition {
+  id: string;
+  symbol: string;
+  side: Side;
+  entryPrice: number;
+  qty: number;
+  openedTs: number;
+  botId?: string;
+}
+
+export interface PaperTrade {
+  id: string;
+  ts: number;
+  symbol: string;
+  side: Side;
+  entryPrice: number;
+  exitPrice: number;
+  qty: number;
+  pnl: number;
+  botId?: string;
+}
+
+export interface BotConfig {
+  id: string;
+  kind: "grid";
+  symbol: string;
+  params: Record<string, number | string>;
+  status: "stopped" | "running";
+}
+
+export interface ConnectionState {
+  connected: boolean;
+  latencyMs: number | null;
+}
+
+interface PersistedSlice {
+  theme: Theme;
+  panels: PanelsState;
+  activeSymbol: string;
+  timeframe: string;
+  layout: LayoutKey;
+  mosaicCells: MosaicCell[];
+  watchlist: string[];
+  paperBalance: number;
+  paperPositions: PaperPosition[];
+  paperOrders: PaperOrder[];
+  paperHistory: PaperTrade[];
+  botConfigs: BotConfig[];
+}
+
+interface VolatileSlice {
+  tickers: Record<string, Ticker>;
+  orderbook: Orderbook | null;
+  candles: Record<string, Candle[]>;
+  journal: JournalEntry[];
+  connection: ConnectionState;
+}
+
+interface Actions {
+  setTheme: (t: Theme) => void;
+  togglePanel: (k: PanelKey) => void;
+  setActiveSymbol: (s: string) => void;
+  setTimeframe: (tf: string) => void;
+  setLayout: (l: LayoutKey) => void;
+  setMosaicCell: (i: number, partial: Partial<MosaicCell>) => void;
+  addIndicator: (cellIndex: number, ind: ActiveIndicator) => void;
+  removeIndicator: (cellIndex: number, id: string) => void;
+
+  updateTicker: (t: Ticker) => void;
+  setOrderbook: (ob: Orderbook | null) => void;
+  applyOrderbookDelta: (symbol: string, asks: [string, string][], bids: [string, string][], ts: number) => void;
+  setCandles: (key: string, candles: Candle[]) => void;
+  updateLastCandle: (key: string, c: Candle) => void;
+
+  setConnected: (b: boolean) => void;
+  setLatency: (ms: number) => void;
+
+  pushJournal: (e: JournalEntry) => void;
+  clearJournal: () => void;
+
+  // Paper trading
+  setPaperBalance: (v: number) => void;
+  setPaperOrders: (o: PaperOrder[]) => void;
+  setPaperPositions: (p: PaperPosition[]) => void;
+  setPaperHistory: (h: PaperTrade[]) => void;
+  resetPaperAccount: () => void;
+  upsertBot: (b: BotConfig) => void;
+  removeBot: (id: string) => void;
+}
+
+type Store = PersistedSlice & VolatileSlice & Actions;
+
+const DEFAULT_PERSISTED: PersistedSlice = {
+  theme: "dark",
+  panels: { marketWatch: true, orderBook: true, navigator: true, terminal: true },
+  activeSymbol: "BTCUSDT",
+  timeframe: "15",
+  layout: "1",
+  mosaicCells: [
+    { symbol: "BTCUSDT",  timeframe: "15", indicators: [] },
+    { symbol: "ETHUSDT",  timeframe: "15", indicators: [] },
+    { symbol: "SOLUSDT",  timeframe: "15", indicators: [] },
+    { symbol: "DOGEUSDT", timeframe: "15", indicators: [] },
+  ],
+  watchlist: ["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT","DOGEUSDT","ADAUSDT","AVAXUSDT","DOTUSDT","LINKUSDT","MATICUSDT","ATOMUSDT"],
+  paperBalance: 10000,
+  paperPositions: [],
+  paperOrders: [],
+  paperHistory: [],
+  botConfigs: [],
+};
+
+const DEFAULT_VOLATILE: VolatileSlice = {
+  tickers: {},
+  orderbook: null,
+  candles: {},
+  journal: [],
+  connection: { connected: false, latencyMs: null },
+};
+
+function sortLevels(side: "asks" | "bids", levels: OrderbookLevel[]): OrderbookLevel[] {
+  return [...levels].sort((a, b) => side === "asks" ? a.price - b.price : b.price - a.price);
+}
+
+export const useStore = create<Store>()(
+  persist(
+    (set) => ({
+      ...DEFAULT_PERSISTED,
+      ...DEFAULT_VOLATILE,
+
+      setTheme: (t) => set({ theme: t }),
+      togglePanel: (k) => set((s) => ({ panels: { ...s.panels, [k]: !s.panels[k] } })),
+      setActiveSymbol: (sym) => set((s) => {
+        const cells = [...s.mosaicCells];
+        cells[0] = { ...cells[0], symbol: sym };
+        return { activeSymbol: sym, mosaicCells: cells };
+      }),
+      setTimeframe: (tf) => set((s) => {
+        const cells = [...s.mosaicCells];
+        cells[0] = { ...cells[0], timeframe: tf };
+        return { timeframe: tf, mosaicCells: cells };
+      }),
+      setLayout: (l) => set({ layout: l }),
+      setMosaicCell: (i, partial) => set((s) => {
+        const cells = [...s.mosaicCells];
+        cells[i] = { ...cells[i], ...partial };
+        const update: Partial<Store> = { mosaicCells: cells };
+        if (i === 0) {
+          if (partial.symbol) update.activeSymbol = partial.symbol;
+          if (partial.timeframe) update.timeframe = partial.timeframe;
+        }
+        return update;
+      }),
+      addIndicator: (cellIndex, ind) => set((s) => {
+        const cells = [...s.mosaicCells];
+        const cell = cells[cellIndex];
+        if (!cell) return s;
+        cells[cellIndex] = { ...cell, indicators: [...cell.indicators, ind] };
+        return { mosaicCells: cells };
+      }),
+      removeIndicator: (cellIndex, id) => set((s) => {
+        const cells = [...s.mosaicCells];
+        const cell = cells[cellIndex];
+        if (!cell) return s;
+        cells[cellIndex] = { ...cell, indicators: cell.indicators.filter((i) => i.id !== id) };
+        return { mosaicCells: cells };
+      }),
+
+      updateTicker: (t) => set((s) => ({ tickers: { ...s.tickers, [t.symbol]: t } })),
+      setOrderbook: (ob) => set({ orderbook: ob }),
+      applyOrderbookDelta: (symbol, askUpdates, bidUpdates, ts) => set((s) => {
+        const cur = s.orderbook && s.orderbook.symbol === symbol ? s.orderbook : null;
+        if (!cur) return s;
+        const askMap = new Map(cur.asks.map((l) => [l.price, l.qty]));
+        const bidMap = new Map(cur.bids.map((l) => [l.price, l.qty]));
+        for (const [pStr, qStr] of askUpdates) {
+          const p = parseFloat(pStr), q = parseFloat(qStr);
+          if (q === 0) askMap.delete(p); else askMap.set(p, q);
+        }
+        for (const [pStr, qStr] of bidUpdates) {
+          const p = parseFloat(pStr), q = parseFloat(qStr);
+          if (q === 0) bidMap.delete(p); else bidMap.set(p, q);
+        }
+        const asks = sortLevels("asks", Array.from(askMap.entries()).map(([price, qty]) => ({ price, qty })));
+        const bids = sortLevels("bids", Array.from(bidMap.entries()).map(([price, qty]) => ({ price, qty })));
+        return { orderbook: { symbol, asks, bids, updatedAt: ts } };
+      }),
+      setCandles: (key, candles) => set((s) => ({ candles: { ...s.candles, [key]: candles } })),
+      updateLastCandle: (key, c) => set((s) => {
+        const existing = s.candles[key] ?? [];
+        if (existing.length === 0) return { candles: { ...s.candles, [key]: [c] } };
+        const last = existing[existing.length - 1];
+        if (last.time === c.time) {
+          const next = existing.slice(0, -1);
+          next.push(c);
+          return { candles: { ...s.candles, [key]: next } };
+        }
+        if (c.time > last.time) {
+          const next = [...existing, c];
+          if (next.length > 1000) next.shift();
+          return { candles: { ...s.candles, [key]: next } };
+        }
+        return s;
+      }),
+
+      setConnected: (b) => set((s) => ({ connection: { ...s.connection, connected: b } })),
+      setLatency: (ms) => set((s) => ({ connection: { ...s.connection, latencyMs: ms } })),
+
+      pushJournal: (e) => set((s) => {
+        const next = [...s.journal, e];
+        if (next.length > 500) next.shift();
+        return { journal: next };
+      }),
+      clearJournal: () => set({ journal: [] }),
+
+      setPaperBalance: (v) => set({ paperBalance: v }),
+      setPaperOrders: (o) => set({ paperOrders: o }),
+      setPaperPositions: (p) => set({ paperPositions: p }),
+      setPaperHistory: (h) => set({ paperHistory: h }),
+      resetPaperAccount: () => set({
+        paperBalance: 10000,
+        paperOrders: [],
+        paperPositions: [],
+        paperHistory: [],
+      }),
+      upsertBot: (b) => set((s) => {
+        const idx = s.botConfigs.findIndex((x) => x.id === b.id);
+        const next = idx >= 0
+          ? s.botConfigs.map((x, i) => (i === idx ? b : x))
+          : [...s.botConfigs, b];
+        return { botConfigs: next };
+      }),
+      removeBot: (id) => set((s) => ({ botConfigs: s.botConfigs.filter((b) => b.id !== id) })),
+    }),
+    {
+      name: "trading-app-store",
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state): PersistedSlice => ({
+        theme: state.theme,
+        panels: state.panels,
+        activeSymbol: state.activeSymbol,
+        timeframe: state.timeframe,
+        layout: state.layout,
+        mosaicCells: state.mosaicCells,
+        watchlist: state.watchlist,
+        paperBalance: state.paperBalance,
+        paperPositions: state.paperPositions,
+        paperOrders: state.paperOrders,
+        paperHistory: state.paperHistory,
+        botConfigs: state.botConfigs,
+      }),
+      version: 1,
+    },
+  ),
+);
+
+export type { Store };

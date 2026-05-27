@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useStore } from "../lib/store";
+import type { PanelKey } from "../lib/store";
 import { MenuBar } from "./MenuBar";
 import { Toolbar } from "./Toolbar";
 import { MarketWatch } from "./MarketWatch";
@@ -7,12 +9,8 @@ import { Navigator } from "./Navigator";
 import { Terminal } from "./Terminal";
 import { StatusBar } from "./StatusBar";
 import { ChartMosaic } from "./ChartMosaic";
-import { fetchKlines } from "../lib/bybit";
-import type { Candle, Interval } from "../lib/types";
-
-export type PanelKey = "marketWatch" | "orderBook" | "navigator" | "terminal";
-export type PanelsState = Record<PanelKey, boolean>;
-export type LayoutKey = "1" | "2" | "4";
+import { ws, init as initWs } from "../lib/bybitWs";
+import { logInfo, logOk } from "../lib/eventBus";
 
 const SHORTCUTS: Record<string, PanelKey> = {
   m: "marketWatch",
@@ -22,111 +20,75 @@ const SHORTCUTS: Record<string, PanelKey> = {
 };
 
 export function MainWindow() {
-  const [panels, setPanels] = useState<PanelsState>({
-    marketWatch: true,
-    orderBook: true,
-    navigator: true,
-    terminal: true,
-  });
-  const [layout, setLayout] = useState<LayoutKey>("1");
-  const [symbol] = useState("BTCUSDT");
-  const [timeframe, setTimeframe] = useState<string>("15");
-  const [candles, setCandles] = useState<Candle[]>([]);
-  const [connected, setConnected] = useState(false);
-  const [latencyMs, setLatencyMs] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const theme       = useStore((s) => s.theme);
+  const panels      = useStore((s) => s.panels);
+  const togglePanel = useStore((s) => s.togglePanel);
+  const setTheme    = useStore((s) => s.setTheme);
+  const activeSymbol = useStore((s) => s.activeSymbol);
+  const watchlist    = useStore((s) => s.watchlist);
 
-  const togglePanel = (k: PanelKey) =>
-    setPanels((p) => ({ ...p, [k]: !p[k] }));
+  // Theme attribute on body
+  useEffect(() => {
+    document.body.dataset.theme = theme;
+  }, [theme]);
 
-  // Keyboard shortcuts (Ctrl+M / Ctrl+D / Ctrl+N / Ctrl+T)
+  // Init WS once
+  useEffect(() => {
+    logInfo("app", "starting Trading App v0.2.0");
+    initWs();
+    // Subscribe tickers for the whole watchlist (so Market Watch is alive)
+    ws.subscribeMany(watchlist.map((s) => `tickers.${s}`));
+    logOk("app", `watching ${watchlist.length} symbols`);
+    return () => { ws.disconnect(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Subscribe orderbook for active symbol; resubscribe on change
+  useEffect(() => {
+    const topic = `orderbook.50.${activeSymbol}`;
+    ws.subscribe(topic);
+    useStore.getState().setOrderbook(null);
+    return () => { ws.unsubscribe(topic); };
+  }, [activeSymbol]);
+
+  // Keyboard shortcuts (Ctrl+M/D/N/T for panels, Ctrl+J for theme)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.ctrlKey || e.altKey || e.shiftKey) return;
-      const key = SHORTCUTS[e.key.toLowerCase()];
-      if (!key) return;
+      const key = e.key.toLowerCase();
+      if (key === "j") {
+        e.preventDefault();
+        setTheme(useStore.getState().theme === "dark" ? "light" : "dark");
+        return;
+      }
+      const panel = SHORTCUTS[key];
+      if (!panel) return;
       e.preventDefault();
-      togglePanel(key);
+      togglePanel(panel);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  // Fetch klines whenever symbol or timeframe changes
-  useEffect(() => {
-    let cancelled = false;
-    setError(null);
-    const t0 = performance.now();
-    fetchKlines(symbol, timeframe as Interval, 200)
-      .then((data) => {
-        if (cancelled) return;
-        setCandles(data);
-        setConnected(true);
-        setLatencyMs(Math.round(performance.now() - t0));
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        const msg = err instanceof Error ? err.message : String(err);
-        setError(msg);
-        setConnected(false);
-      });
-    return () => { cancelled = true; };
-  }, [symbol, timeframe]);
-
-  const lastPrice = candles.length > 0 ? candles[candles.length - 1].close : undefined;
-
-  const tfLabel = (() => {
-    const map: Record<string, string> = {
-      "1": "1m", "3": "3m", "5": "5m", "15": "15m", "30": "30m",
-      "60": "1h", "120": "2h", "240": "4h", "360": "6h", "720": "12h",
-      "D": "1D", "W": "1W", "M": "1M",
-    };
-    return map[timeframe] ?? timeframe;
-  })();
+  }, [togglePanel, setTheme]);
 
   return (
     <div className="app">
       <MenuBar />
-      <Toolbar
-        panels={panels}
-        togglePanel={togglePanel}
-        timeframe={timeframe}
-        setTimeframe={setTimeframe}
-        layout={layout}
-        setLayout={setLayout}
-      />
+      <Toolbar />
 
       <div className="body">
         {panels.marketWatch && (
           <div className="col-left">
-            <MarketWatch activeSymbol={symbol} />
+            <MarketWatch />
           </div>
         )}
 
         <div className="col-center">
-          {error ? (
-            <div style={{
-              flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
-              flexDirection: "column", gap: 12, padding: 24, color: "var(--red)",
-            }}>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>Ошибка подключения к Bybit</div>
-              <div style={{ fontSize: 12, fontFamily: "monospace", color: "var(--fg-dim)", textAlign: "center", maxWidth: 600 }}>
-                {error}
-              </div>
-            </div>
-          ) : (
-            <ChartMosaic
-              layout={layout}
-              candles={candles}
-              primarySymbol={symbol}
-              primaryTimeframe={tfLabel}
-            />
-          )}
+          <ChartMosaic />
         </div>
 
         {panels.orderBook && (
           <div className="col-dom">
-            <OrderBook symbol={symbol} lastPrice={lastPrice} />
+            <OrderBook />
           </div>
         )}
 
@@ -139,11 +101,7 @@ export function MainWindow() {
 
       {panels.terminal && <Terminal />}
 
-      <StatusBar
-        connected={connected}
-        latencyMs={latencyMs}
-        candleCount={candles.length}
-      />
+      <StatusBar />
     </div>
   );
 }

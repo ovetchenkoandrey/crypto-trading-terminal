@@ -1,56 +1,71 @@
+import { useEffect } from "react";
+import { useStore } from "../lib/store";
 import { ChartPane } from "./ChartPane";
-import type { Candle } from "../lib/types";
-import type { LayoutKey } from "./MainWindow";
+import { fetchKlines } from "../lib/bybit";
+import { ws } from "../lib/bybitWs";
+import { tfLabel } from "../lib/symbols";
+import { fmtPrice, fmtPercent } from "../lib/format";
+import { getPricePrecision } from "../lib/symbols";
+import { logError } from "../lib/eventBus";
+import type { Interval } from "../lib/types";
 
-interface CellSpec {
-  symbol: string;
-  timeframe: string;
-}
+export function ChartMosaic() {
+  const layout = useStore((s) => s.layout);
+  const cells = useStore((s) => s.mosaicCells);
+  const candles = useStore((s) => s.candles);
+  const tickers = useStore((s) => s.tickers);
+  const setCandles = useStore((s) => s.setCandles);
 
-const CELLS: CellSpec[] = [
-  { symbol: "BTCUSDT",  timeframe: "15m" },
-  { symbol: "ETHUSDT",  timeframe: "1h"  },
-  { symbol: "SOLUSDT",  timeframe: "5m"  },
-  { symbol: "DOGEUSDT", timeframe: "15m" },
-];
-
-interface ChartMosaicProps {
-  layout: LayoutKey;
-  candles: Candle[];
-  primarySymbol: string;
-  primaryTimeframe: string;
-}
-
-export function ChartMosaic({ layout, candles, primarySymbol, primaryTimeframe }: ChartMosaicProps) {
   const count = layout === "1" ? 1 : layout === "2" ? 2 : 4;
-  const cells: CellSpec[] = [
-    { symbol: primarySymbol, timeframe: primaryTimeframe },
-    ...CELLS.slice(1, count),
-  ].slice(0, count);
+  const visible = cells.slice(0, count);
+
+  // For each visible cell, ensure we have klines loaded and WS subscribed
+  useEffect(() => {
+    const wantedTopics = new Set<string>();
+    for (const c of visible) {
+      const key = `${c.symbol}.${c.timeframe}`;
+      wantedTopics.add(`kline.${c.timeframe}.${c.symbol}`);
+      if (!candles[key] || candles[key].length === 0) {
+        fetchKlines(c.symbol, c.timeframe as Interval, 200)
+          .then((data) => setCandles(key, data))
+          .catch((err: unknown) => logError("rest", `klines ${c.symbol}.${c.timeframe}: ${err instanceof Error ? err.message : String(err)}`));
+      }
+      ws.subscribe(`kline.${c.timeframe}.${c.symbol}`);
+    }
+    // Unsubscribe topics for cells not visible
+    return () => {
+      for (const c of visible) {
+        const topic = `kline.${c.timeframe}.${c.symbol}`;
+        if (!wantedTopics.has(topic)) ws.unsubscribe(topic);
+      }
+    };
+  // We include candles only via its keyset to avoid loops; passing it directly would re-run on every tick.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible.map((c) => `${c.symbol}.${c.timeframe}`).join("|")]);
 
   return (
     <div className={"chart-mosaic layout-" + layout}>
-      {cells.map((cell, i) => {
-        const last = candles[candles.length - 1];
-        const first = candles[0];
-        const ch = last && first && first.close ? ((last.close - first.close) / first.close) * 100 : 0;
+      {visible.map((cell, i) => {
+        const key = `${cell.symbol}.${cell.timeframe}`;
+        const data = candles[key] ?? [];
+        const ticker = tickers[cell.symbol];
+        const precision = getPricePrecision(cell.symbol, ticker?.lastPrice);
+        const ch = ticker?.change24h ?? 0;
+        const dir = ch >= 0 ? "up" : "dn";
         return (
-          <div key={i} className={"chart-cell" + (i === 0 ? " active" : "")}>
+          <div key={`${i}-${key}`} className={"chart-cell" + (i === 0 ? " active" : "")}>
             <div className="chart-cell-head">
               <span className="sym">{cell.symbol}</span>
-              <span className="tf">{cell.timeframe}</span>
-              {i === 0 && last && (
+              <span className="tf">{tfLabel(cell.timeframe)}</span>
+              {ticker && (
                 <>
-                  <span className="price">{last.close.toFixed(2)}</span>
-                  <span className={"ch " + (ch >= 0 ? "up" : "dn")}>
-                    {ch >= 0 ? "+" : ""}{ch.toFixed(2)}%
-                  </span>
+                  <span className="price">{fmtPrice(ticker.lastPrice, precision)}</span>
+                  <span className={"ch " + dir}>{fmtPercent(ch)}</span>
                 </>
               )}
             </div>
             <div className="chart-host">
-              {/* Primary cell shows live Bybit data; other cells share the same dataset for now */}
-              <ChartPane data={candles} symbol={cell.symbol} timeframe={cell.timeframe} />
+              <ChartPane data={data} symbol={cell.symbol} timeframe={tfLabel(cell.timeframe)} />
             </div>
           </div>
         );
