@@ -11,6 +11,8 @@ import { StatusBar } from "./StatusBar";
 import { ChartMosaic } from "./ChartMosaic";
 import { ws, init as initWs } from "../lib/bybitWs";
 import { logInfo, logOk } from "../lib/eventBus";
+import { paperEngine } from "../lib/paper/engine";
+import { botManager } from "../lib/bots/manager";
 
 const SHORTCUTS: Record<string, PanelKey> = {
   m: "marketWatch",
@@ -32,14 +34,19 @@ export function MainWindow() {
     document.body.dataset.theme = theme;
   }, [theme]);
 
-  // Init WS once
+  // Init WS + paper engine + bot manager once
   useEffect(() => {
     logInfo("app", "starting Trading App v0.2.0");
     initWs();
+    paperEngine.init();
+    botManager.init();
     // Subscribe tickers for the whole watchlist (so Market Watch is alive)
     ws.subscribeMany(watchlist.map((s) => `tickers.${s}`));
     logOk("app", `watching ${watchlist.length} symbols`);
-    return () => { ws.disconnect(); };
+    return () => {
+      ws.disconnect();
+      paperEngine.shutdown();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

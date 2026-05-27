@@ -449,6 +449,29 @@ button { font-family: inherit; }
 .nav-item-draggable { cursor: grab; }
 .nav-item-draggable:active { cursor: grabbing; }
 .nav-item-draggable:hover { background: var(--bg-hover); outline: 1px dashed var(--border); }
+.nav-item.disabled { color: var(--fg-mute); cursor: not-allowed; opacity: 0.55; }
+.nav-item.disabled:hover { background: transparent; }
+
+/* ───────────── Bot config dialog ───────────── */
+.bot-cfg { display: flex; flex-direction: column; gap: 10px; padding: 4px 2px; }
+.bot-cfg-row {
+  display: grid; grid-template-columns: 140px 1fr; gap: 12px;
+  align-items: center; font-size: 12px;
+}
+.bot-cfg-row span { color: var(--fg-dim); }
+.bot-cfg-row input, .bot-cfg-row select {
+  background: var(--bg-input); border: 1px solid var(--border);
+  color: var(--fg); padding: 5px 8px;
+  font-family: inherit; font-size: 12px; border-radius: 4px;
+  outline: none; font-variant-numeric: tabular-nums;
+}
+.bot-cfg-row input:focus, .bot-cfg-row select:focus { border-color: var(--accent); }
+.bot-cfg-status {
+  margin-top: 6px; padding: 8px 10px;
+  background: var(--bg-panel-2); border-radius: 4px;
+  font-size: 12px; color: var(--fg-dim);
+}
+.bot-cfg-buttons { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
 
 /* ───────────── Terminal (bottom) ───────────── */
 .terminal {

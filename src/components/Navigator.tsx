@@ -1,3 +1,9 @@
+import { useState } from "react";
+import { useStore } from "../lib/store";
+import type { BotConfig } from "../lib/store";
+import { BotConfigDialog } from "./bots/BotConfigDialog";
+import { getBotFactory } from "../lib/bots/registry";
+
 function dragStart(e: React.DragEvent, kind: string) {
   e.dataTransfer.setData("application/x-indicator", JSON.stringify({ kind }));
   e.dataTransfer.effectAllowed = "copy";
@@ -11,7 +17,30 @@ const DRAGGABLE_INDICATORS: { label: string; kind: string }[] = [
   { label: "Bollinger Bands", kind: "bollinger" },
 ];
 
+const BOT_TEMPLATES: { label: string; kind: string; available: boolean }[] = [
+  { label: "Grid Bot",        kind: "grid", available: true  },
+  { label: "DCA Strategy",    kind: "dca",  available: false },
+  { label: "MA Crossover EA", kind: "mac",  available: false },
+  { label: "Mean Reversion",  kind: "mr",   available: false },
+];
+
+function newBotFromTemplate(kind: string, activeSymbol: string): BotConfig | null {
+  const factory = getBotFactory(kind);
+  if (!factory) return null;
+  return {
+    id: "bot-" + Math.random().toString(36).slice(2, 10),
+    kind,
+    symbol: activeSymbol,
+    params: { ...factory.defaultParams },
+    status: "stopped",
+  };
+}
+
 export function Navigator() {
+  const botConfigs   = useStore((s) => s.botConfigs);
+  const activeSymbol = useStore((s) => s.activeSymbol);
+  const [openBot, setOpenBot] = useState<BotConfig | null>(null);
+
   return (
     <>
       <div className="panel-title">
@@ -31,25 +60,52 @@ export function Navigator() {
             <span className="ico">📈</span>{label}
           </div>
         ))}
-        <div className="nav-item"><span className="ico">📈</span>Stochastic</div>
-        <div className="nav-item"><span className="ico">📈</span>ATR</div>
-        <div className="nav-item"><span className="ico">📈</span>Volume Profile</div>
+        <div className="nav-item disabled"><span className="ico">📈</span>Stochastic</div>
+        <div className="nav-item disabled"><span className="ico">📈</span>ATR</div>
+        <div className="nav-item disabled"><span className="ico">📈</span>Volume Profile</div>
 
-        <div className="nav-cat"><span className="chev">▾</span>🤖 Эксперты (боты)</div>
-        <div className="nav-item">
-          <span className="ico">🤖</span>Grid Bot
-          <span className="badge running">RUN</span>
-        </div>
-        <div className="nav-item"><span className="ico">🤖</span>DCA Strategy</div>
-        <div className="nav-item"><span className="ico">🤖</span>MA Crossover EA</div>
-        <div className="nav-item"><span className="ico">🤖</span>Mean Reversion</div>
+        <div className="nav-cat"><span className="chev">▾</span>🤖 Создать бота</div>
+        {BOT_TEMPLATES.map(({ label, kind, available }) => (
+          <div
+            key={kind}
+            className={"nav-item" + (available ? "" : " disabled")}
+            onClick={() => {
+              if (!available) return;
+              const cfg = newBotFromTemplate(kind, activeSymbol);
+              if (cfg) setOpenBot(cfg);
+            }}
+            title={available ? "Создать новый экземпляр" : "Скоро"}
+          >
+            <span className="ico">🤖</span>{label}
+          </div>
+        ))}
+
+        {botConfigs.length > 0 && (
+          <>
+            <div className="nav-cat"><span className="chev">▾</span>⚙ Активные боты ({botConfigs.length})</div>
+            {botConfigs.map((b) => (
+              <div
+                key={b.id}
+                className="nav-item"
+                onClick={() => setOpenBot(b)}
+                title="Открыть настройки"
+              >
+                <span className="ico">🤖</span>
+                {(getBotFactory(b.kind)?.name ?? b.kind)} · {b.symbol}
+                {b.status === "running" && <span className="badge running">RUN</span>}
+              </div>
+            ))}
+          </>
+        )}
 
         <div className="nav-cat"><span className="chev">▾</span>📜 Скрипты</div>
-        <div className="nav-item"><span className="ico">📜</span>close_all_positions</div>
-        <div className="nav-item"><span className="ico">📜</span>export_history_csv</div>
-
-        <div className="nav-cat"><span className="chev">▸</span>⚙ Сервисы</div>
+        <div className="nav-item disabled"><span className="ico">📜</span>close_all_positions</div>
+        <div className="nav-item disabled"><span className="ico">📜</span>export_history_csv</div>
       </div>
+
+      {openBot && (
+        <BotConfigDialog bot={openBot} onClose={() => setOpenBot(null)} />
+      )}
     </>
   );
 }

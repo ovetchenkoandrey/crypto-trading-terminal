@@ -94,7 +94,7 @@ export interface PaperTrade {
 
 export interface BotConfig {
   id: string;
-  kind: "grid";
+  kind: string;             // matches a BotFactory.kind in lib/bots/registry.ts
   symbol: string;
   params: Record<string, number | string>;
   status: "stopped" | "running";
