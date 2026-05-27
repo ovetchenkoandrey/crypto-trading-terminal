@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<title>Trading App — MT-style mockup v0.2</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg-panel: #161b22;
+    --bg-panel-2: #1c2128;
+    --bg-input: #0d1117;
+    --bg-hover: #21262d;
+    --border: #30363d;
+    --border-soft: #21262d;
+    --fg: #e6edf3;
+    --fg-dim: #8b949e;
+    --fg-mute: #6e7681;
+    --accent: #f0b90b;
+    --accent-soft: rgba(240, 185, 11, 0.15);
+    --green: #26a69a;
+    --green-soft: rgba(38, 166, 154, 0.18);
+    --red: #ef5350;
+    --red-soft: rgba(239, 83, 80, 0.18);
+    --grid: #1f2630;
+    --crosshair: #4a5568;
+  }
+  [data-theme="light"] {
+    --bg: #ffffff;
+    --bg-panel: #f7f8fa;
+    --bg-panel-2: #eef0f4;
+    --bg-input: #ffffff;
+    --bg-hover: #e7eaef;
+    --border: #d0d7de;
+    --border-soft: #e4e7eb;
+    --fg: #1e2329;
+    --fg-dim: #57606a;
+    --fg-mute: #8b949e;
+    --accent: #d48800;
+    --accent-soft: rgba(212, 136, 0, 0.15);
+    --green: #14a085;
+    --green-soft: rgba(20, 160, 133, 0.15);
+    --red: #d33a3a;
+    --red-soft: rgba(211, 58, 58, 0.15);
+    --grid: #eef0f4;
+    --crosshair: #a0a9b3;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 12px/1.4 "Segoe UI", -apple-system, system-ui, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ─────────────────  Control bar  ───────────────── */
+  .control-bar {
+    height: 40px;
+    display: flex; align-items: center; gap: 14px;
+    padding: 0 14px;
+    background: linear-gradient(180deg, var(--bg-panel-2), var(--bg-panel));
+    border-bottom: 1px solid var(--border);
+    user-select: none;
+  }
+  .brand { font-weight: 600; color: var(--accent); font-size: 13px; letter-spacing: 0.3px; }
+  .switcher {
+    display: flex;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px;
+  }
+  .switcher button {
+    background: transparent; color: var(--fg-dim);
+    border: 0; padding: 4px 10px;
+    font-size: 11px; border-radius: 4px;
+    cursor: pointer; font-family: inherit;
+  }
+  .switcher button.active { background: var(--accent); color: #1a1a1a; font-weight: 600; }
+  .switcher button:hover:not(.active) { color: var(--fg); background: var(--bg-hover); }
+  .spacer { flex: 1; }
+  .hint { color: var(--fg-mute); font-size: 11px; }
+  .label-mini { color: var(--fg-mute); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.4px; margin-right: 4px;}
+
+  /* ─────────────────  Main MT layout  ───────────────── */
+  .app {
+    height: calc(100vh - 40px);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* menu bar */
+  .mt-menu {
+    display: flex; height: 24px;
+    background: var(--bg-panel-2);
+    border-bottom: 1px solid var(--border-soft);
+    padding: 0 4px; align-items: center; gap: 2px;
+  }
+  .mt-menu .mi {
+    padding: 3px 10px; font-size: 11.5px;
+    color: var(--fg-dim); cursor: pointer; border-radius: 3px;
+  }
+  .mt-menu .mi:hover { background: var(--bg-hover); color: var(--fg); }
+
+  /* toolbar */
+  .mt-toolbar {
+    display: flex; height: 34px;
+    align-items: center; gap: 6px; padding: 0 8px;
+    background: var(--bg-panel); border-bottom: 1px solid var(--border-soft);
+  }
+  .sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
+  .icon-btn {
+    width: 26px; height: 26px;
+    display: flex; align-items: center; justify-content: center;
+    background: transparent; border: 0; border-radius: 4px;
+    color: var(--fg-dim); cursor: pointer; font-size: 13px;
+  }
+  .icon-btn:hover { background: var(--bg-hover); color: var(--fg); }
+  .icon-btn.active { background: var(--accent-soft); color: var(--accent); }
+  .tf-btn {
+    background: transparent; border: 0; color: var(--fg-dim);
+    padding: 4px 8px; font-size: 11px; cursor: pointer;
+    border-radius: 3px; font-family: inherit;
+  }
+  .tf-btn:hover { background: var(--bg-hover); color: var(--fg); }
+  .tf-btn.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .btn {
+    background: var(--bg-input); border: 1px solid var(--border);
+    color: var(--fg); padding: 4px 9px; font-size: 11px;
+    cursor: pointer; border-radius: 4px; font-family: inherit;
+  }
+  .btn:hover { background: var(--bg-hover); }
+  .btn.red { background: var(--red); color: white; border-color: var(--red); font-weight: 600; }
+  .btn.green { background: var(--green); color: white; border-color: var(--green); font-weight: 600; }
+
+  /* body: 4 columns + bottom terminal */
+  .mt-body { flex: 1; display: flex; min-height: 0; }
+  .col-left   { width: 210px; border-right: 1px solid var(--border-soft); background: var(--bg-panel); display: flex; flex-direction: column; }
+  .col-center { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .col-dom    { width: 230px; border-left: 1px solid var(--border-soft); background: var(--bg-panel); display: flex; flex-direction: column; }
+  .col-right  { width: 210px; border-left: 1px solid var(--border-soft); background: var(--bg-panel); display: flex; flex-direction: column; }
+  .col-left.hidden, .col-dom.hidden, .col-right.hidden, .mt-terminal.hidden { display: none; }
+
+  /* panel-toggle group on toolbar */
+  .panel-toggles {
+    display: flex; align-items: center; gap: 2px;
+    padding: 0 4px;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    margin: 0 4px;
+    height: 22px;
+  }
+  .panel-toggles .icon-btn {
+    width: 28px; height: 22px;
+    border-radius: 3px;
+    font-size: 13px;
+    position: relative;
+  }
+  .panel-toggles .icon-btn.off {
+    color: var(--fg-mute);
+    opacity: 0.5;
+  }
+  .panel-toggles .icon-btn.on {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .panel-toggles .icon-btn.on::after {
+    content: ""; position: absolute;
+    bottom: 1px; left: 4px; right: 4px;
+    height: 2px; border-radius: 1px;
+    background: var(--accent);
+  }
+
+  .panel-title {
+    padding: 6px 10px;
+    font-size: 11px; font-weight: 600;
+    color: var(--fg-dim);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border-soft);
+    background: var(--bg-panel-2);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-title .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--green); box-shadow: 0 0 6px var(--green);
+  }
+  .panel-title .right { margin-left: auto; color: var(--fg-mute); font-weight: 400; text-transform: none; letter-spacing: 0; }
+
+  /* Market Watch (left) */
+  .mw-list { flex: 1; overflow: auto; }
+  .mw-head {
+    display: grid; grid-template-columns: 1fr 70px 70px;
+    gap: 6px; padding: 5px 10px;
+    color: var(--fg-mute); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.4px;
+    border-bottom: 1px solid var(--border-soft);
+    background: var(--bg-panel-2); position: sticky; top: 0;
+  }
+  .mw-head .num { text-align: right; }
+  .mw-row {
+    display: grid; grid-template-columns: 1fr 70px 70px;
+    gap: 6px; padding: 6px 10px;
+    font-size: 11.5px;
+    border-bottom: 1px solid var(--border-soft);
+    cursor: pointer;
+    font-variant-numeric: tabular-nums;
+  }
+  .mw-row:hover { background: var(--bg-hover); }
+  .mw-row.active { background: var(--accent-soft); }
+  .mw-row .sym { color: var(--fg); font-weight: 500; }
+  .mw-row .bid { color: var(--red); text-align: right; }
+  .mw-row .ask { color: var(--green); text-align: right; }
+
+  /* Chart mosaic (center) */
+  .chart-mosaic {
+    flex: 1;
+    display: grid; gap: 1px;
+    background: var(--border-soft);
+    min-height: 0;
+  }
+  .chart-mosaic.layout-1 { grid-template: 1fr / 1fr; }
+  .chart-mosaic.layout-2 { grid-template: 1fr / 1fr 1fr; }
+  .chart-mosaic.layout-4 { grid-template: 1fr 1fr / 1fr 1fr; }
+  .chart-cell {
+    background: var(--bg);
+    position: relative;
+    min-height: 0; min-width: 0;
+    display: flex; flex-direction: column;
+    border: 1px solid transparent;
+  }
+  .chart-cell.active { border-color: var(--accent); }
+  .chart-cell-head {
+    height: 24px;
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 10px;
+    background: var(--bg-panel-2);
+    border-bottom: 1px solid var(--border-soft);
+    font-size: 11px; flex-shrink: 0;
+  }
+  .chart-cell-head .sym { color: var(--fg); font-weight: 600; }
+  .chart-cell-head .tf  { color: var(--fg-dim); }
+  .chart-cell-head .price { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .chart-cell-head .ch { font-size: 10.5px; padding: 1px 5px; border-radius: 3px; font-variant-numeric: tabular-nums; }
+  .chart-cell-head .ch.up { background: var(--green-soft); color: var(--green); }
+  .chart-cell-head .ch.dn { background: var(--red-soft); color: var(--red); }
+  .chart-wrap {
+    flex: 1; min-height: 0; min-width: 0;
+    position: relative; overflow: hidden;
+  }
+  .chart-svg { width: 100%; height: 100%; display: block; }
+  .chart-overlay-top {
+    position: absolute; top: 6px; left: 8px;
+    display: flex; gap: 8px; align-items: center;
+    pointer-events: none; font-size: 10.5px;
+  }
+  .ohlc { display: flex; gap: 8px; color: var(--fg-dim); }
+  .ohlc .v { color: var(--fg); font-variant-numeric: tabular-nums; }
+  .ohlc .v.up { color: var(--green); }
+  .ohlc .v.dn { color: var(--red); }
+
+  /* DOM (orderbook) */
+  .ob-head {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    padding: 5px 10px;
+    font-size: 10px; color: var(--fg-mute);
+    border-bottom: 1px solid var(--border-soft);
+    text-transform: uppercase; letter-spacing: 0.4px;
+    background: var(--bg-panel-2);
+  }
+  .ob-head span:not(:first-child) { text-align: right; }
+  .ob-rows { overflow: hidden; }
+  .ob-rows.asks { display: flex; flex-direction: column-reverse; }
+  .ob-row {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    padding: 2.5px 10px;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    position: relative; cursor: pointer;
+  }
+  .ob-row:hover { background: var(--bg-hover); }
+  .ob-row .price { z-index: 1; }
+  .ob-row .qty, .ob-row .total { color: var(--fg); text-align: right; z-index: 1; }
+  .ob-row.ask .price { color: var(--red); }
+  .ob-row.bid .price { color: var(--green); }
+  .ob-row::after {
+    content: ""; position: absolute; right: 0; top: 0; bottom: 0;
+    width: var(--bar-w, 0%); z-index: 0;
+  }
+  .ob-row.ask::after { background: var(--red-soft); }
+  .ob-row.bid::after { background: var(--green-soft); }
+  .ob-spread {
+    padding: 7px 10px;
+    text-align: center;
+    background: var(--bg-panel-2);
+    border-top: 1px solid var(--border-soft);
+    border-bottom: 1px solid var(--border-soft);
+    font-size: 13px; font-weight: 600;
+    color: var(--green);
+    font-variant-numeric: tabular-nums;
+  }
+  .ob-spread .sub { color: var(--fg-mute); font-weight: 400; font-size: 10.5px; margin-left: 6px; }
+
+  /* Navigator (right) */
+  .nav-tree { flex: 1; overflow: auto; padding: 4px 0; }
+  .nav-cat {
+    padding: 6px 10px;
+    font-size: 11px; color: var(--fg-dim);
+    font-weight: 600;
+    display: flex; align-items: center; gap: 6px;
+    cursor: pointer;
+  }
+  .nav-cat:hover { background: var(--bg-hover); }
+  .nav-cat .chev { font-size: 9px; color: var(--fg-mute); width: 8px; }
+  .nav-item {
+    padding: 4px 10px 4px 28px;
+    font-size: 11.5px; cursor: pointer;
+    color: var(--fg);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .nav-item:hover { background: var(--bg-hover); }
+  .nav-item .ico { opacity: 0.7; width: 14px; text-align: center; }
+  .nav-item .badge {
+    margin-left: auto;
+    font-size: 9px; padding: 1px 5px; border-radius: 8px;
+    background: var(--accent-soft); color: var(--accent);
+  }
+  .nav-item .badge.running { background: var(--green-soft); color: var(--green); }
+
+  /* Terminal (bottom) */
+  .mt-terminal {
+    height: 200px; flex-shrink: 0;
+    background: var(--bg-panel);
+    border-top: 1px solid var(--border);
+    display: flex; flex-direction: column;
+  }
+  .tabs {
+    display: flex;
+    background: var(--bg-panel-2);
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .tab {
+    padding: 7px 14px;
+    font-size: 11.5px; color: var(--fg-dim);
+    cursor: pointer;
+    border-right: 1px solid var(--border-soft);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .tab.active {
+    color: var(--fg); background: var(--bg-panel);
+    box-shadow: inset 0 -2px 0 var(--accent);
+  }
+  .tab .badge {
+    font-size: 9.5px; padding: 1px 5px; border-radius: 8px;
+    background: var(--bg-input); color: var(--fg-dim);
+  }
+  .tab.active .badge { background: var(--accent-soft); color: var(--accent); }
+  .term-content { flex: 1; overflow: auto; min-height: 0; }
+  .term-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .term-table th {
+    text-align: left; padding: 5px 10px;
+    color: var(--fg-dim); font-weight: 500;
+    background: var(--bg-panel-2);
+    border-bottom: 1px solid var(--border-soft);
+    position: sticky; top: 0; z-index: 1;
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.4px;
+  }
+  .term-table td {
+    padding: 5px 10px; border-bottom: 1px solid var(--border-soft);
+    color: var(--fg); font-variant-numeric: tabular-nums;
+  }
+  .term-table tr:hover td { background: var(--bg-hover); }
+  .pnl-pos { color: var(--green); }
+  .pnl-neg { color: var(--red); }
+
+  /* Journal */
+  .journal { font-family: "Consolas", "Courier New", monospace; font-size: 11px; padding: 6px 12px; }
+  .jrn { display: grid; grid-template-columns: 90px 60px 1fr; gap: 12px; padding: 2px 0; }
+  .jrn .ts { color: var(--fg-mute); }
+  .jrn .lvl.info  { color: var(--fg-dim); }
+  .jrn .lvl.ok    { color: var(--green); }
+  .jrn .lvl.warn  { color: var(--accent); }
+  .jrn .lvl.error { color: var(--red); }
+  .jrn .msg { color: var(--fg); }
+  .jrn .msg .h { color: var(--fg-dim); }
+
+  /* Status bar */
+  .status-bar {
+    height: 22px; flex-shrink: 0;
+    background: var(--bg-panel-2);
+    border-top: 1px solid var(--border-soft);
+    display: flex; align-items: center;
+    padding: 0 12px; gap: 16px;
+    font-size: 11px; color: var(--fg-dim);
+  }
+  .status-bar .sep-dot { color: var(--fg-mute); }
+  .status-bar .ok::before { content: "● "; color: var(--green); }
+
+  /* scrollbar */
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-track { background: var(--bg); }
+  *::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; }
+  *::-webkit-scrollbar-thumb:hover { background: var(--fg-mute); }
+</style>
+</head>
+<body data-theme="dark">
+
+<!-- ─────────────────  Control bar  ───────────────── -->
+<div class="control-bar">
+  <div class="brand">⚡ TRADING APP — Mockup v0.2 (MT-style)</div>
+
+  <span class="label-mini">Тема</span>
+  <div class="switcher" id="theme-switcher">
+    <button data-theme="dark" class="active">🌙 Dark</button>
+    <button data-theme="light">☀️ Light</button>
+  </div>
+
+  <span class="label-mini">Графики</span>
+  <div class="switcher" id="layout-switcher">
+    <button data-layout="1">1×1</button>
+    <button data-layout="2">1×2</button>
+    <button data-layout="4" class="active">2×2</button>
+  </div>
+
+  <div class="spacer"></div>
+  <div class="hint">Статичный макет. Логики нет, кнопки не работают. Цель — посмотреть и обсудить.</div>
+</div>
+
+<!-- ─────────────────  Main app  ───────────────── -->
+<div class="app">
+
+  <!-- menu bar -->
+  <div class="mt-menu">
+    <span class="mi">Файл</span>
+    <span class="mi">Вид</span>
+    <span class="mi">Вставка</span>
+    <span class="mi">Графики</span>
+    <span class="mi">Сервис</span>
+    <span class="mi">Окно</span>
+    <span class="mi">Справка</span>
+  </div>
+
+  <!-- toolbar -->
+  <div class="mt-toolbar">
+    <button class="icon-btn" title="Новый график">📊</button>
+    <button class="icon-btn" title="Сохранить">💾</button>
+    <span class="sep"></span>
+    <button class="icon-btn active" title="Свечи">🕯</button>
+    <button class="icon-btn" title="Бары">📊</button>
+    <button class="icon-btn" title="Линия">📈</button>
+    <span class="sep"></span>
+    <button class="tf-btn">M1</button>
+    <button class="tf-btn">M5</button>
+    <button class="tf-btn active">M15</button>
+    <button class="tf-btn">H1</button>
+    <button class="tf-btn">H4</button>
+    <button class="tf-btn">D1</button>
+    <button class="tf-btn">W1</button>
+    <span class="sep"></span>
+    <button class="icon-btn" title="Индикатор">𝑓</button>
+    <button class="icon-btn" title="Линия тренда">📐</button>
+    <button class="icon-btn" title="Горизонтальная линия">─</button>
+    <button class="icon-btn" title="Фибоначчи">𝝓</button>
+    <button class="icon-btn" title="Текст">T</button>
+    <span class="sep"></span>
+    <button class="icon-btn active" title="Крестик">✛</button>
+    <button class="icon-btn" title="Авто-скролл">⏵</button>
+
+    <span class="spacer" style="flex:1;"></span>
+
+    <div class="panel-toggles" id="panel-toggles">
+      <button class="icon-btn on" data-panel="left"     title="Обзор рынка (Ctrl+M)">👁</button>
+      <button class="icon-btn on" data-panel="dom"      title="Стакан / DOM (Ctrl+D)">📊</button>
+      <button class="icon-btn on" data-panel="right"    title="Навигатор (Ctrl+N)">🤖</button>
+      <button class="icon-btn on" data-panel="terminal" title="Терминал (Ctrl+T)">📋</button>
+    </div>
+
+    <button class="btn">⚙ Настройки</button>
+  </div>
+
+  <!-- body: 4 columns -->
+  <div class="mt-body">
+
+    <!-- left: Market Watch -->
+    <div class="col-left">
+      <div class="panel-title">
+        <span class="dot"></span>
+        Обзор рынка
+        <span class="right">Bybit</span>
+      </div>
+      <div class="mw-head">
+        <span>Символ</span>
+        <span class="num">Bid</span>
+        <span class="num">Ask</span>
+      </div>
+      <div class="mw-list" id="mw-list"></div>
+    </div>
+
+    <!-- center: chart mosaic -->
+    <div class="col-center">
+      <div class="chart-mosaic layout-4" id="mosaic"></div>
+    </div>
+
+    <!-- DOM (orderbook) -->
+    <div class="col-dom">
+      <div class="panel-title">
+        <span class="dot"></span>
+        Стакан · BTCUSDT
+        <span class="right">×10</span>
+      </div>
+      <div class="ob-head">
+        <span>Цена</span>
+        <span>Размер</span>
+        <span>Сумма</span>
+      </div>
+      <div class="ob-rows asks" id="ob-asks"></div>
+      <div class="ob-spread" id="ob-spread"></div>
+      <div class="ob-rows bids" id="ob-bids"></div>
+    </div>
+
+    <!-- right: Navigator -->
+    <div class="col-right">
+      <div class="panel-title">
+        <span class="dot"></span>
+        Навигатор
+      </div>
+      <div class="nav-tree">
+        <div class="nav-cat"><span class="chev">▾</span>📁 Индикаторы</div>
+        <div class="nav-item"><span class="ico">📈</span>Moving Average</div>
+        <div class="nav-item"><span class="ico">📈</span>EMA</div>
+        <div class="nav-item"><span class="ico">📈</span>RSI</div>
+        <div class="nav-item"><span class="ico">📈</span>MACD</div>
+        <div class="nav-item"><span class="ico">📈</span>Bollinger Bands</div>
+        <div class="nav-item"><span class="ico">📈</span>Stochastic</div>
+        <div class="nav-item"><span class="ico">📈</span>ATR</div>
+        <div class="nav-item"><span class="ico">📈</span>Volume Profile</div>
+
+        <div class="nav-cat"><span class="chev">▾</span>🤖 Эксперты (боты)</div>
+        <div class="nav-item"><span class="ico">🤖</span>Grid Bot<span class="badge running">RUN</span></div>
+        <div class="nav-item"><span class="ico">🤖</span>DCA Strategy</div>
+        <div class="nav-item"><span class="ico">🤖</span>MA Crossover EA</div>
+        <div class="nav-item"><span class="ico">🤖</span>Mean Reversion</div>
+
+        <div class="nav-cat"><span class="chev">▾</span>📜 Скрипты</div>
+        <div class="nav-item"><span class="ico">📜</span>close_all_positions</div>
+        <div class="nav-item"><span class="ico">📜</span>export_history_csv</div>
+
+        <div class="nav-cat"><span class="chev">▸</span>⚙ Сервисы</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Terminal -->
+  <div class="mt-terminal">
+    <div class="tabs" id="term-tabs">
+      <div class="tab" data-tab="positions">Позиции<span class="badge">3</span></div>
+      <div class="tab" data-tab="orders">Открытые ордера<span class="badge">2</span></div>
+      <div class="tab" data-tab="history">История сделок</div>
+      <div class="tab" data-tab="alerts">Алерты<span class="badge">1</span></div>
+      <div class="tab active" data-tab="journal">Журнал</div>
+    </div>
+    <div class="term-content">
+      <!-- positions -->
+      <div class="term-pane" data-pane="positions" hidden>
+        <table class="term-table">
+          <thead>
+            <tr>
+              <th>Время</th><th>Символ</th><th>Тип</th>
+              <th>Объём</th><th>Цена входа</th>
+              <th>S/L</th><th>T/P</th>
+              <th>Текущая</th><th>P/L, $</th><th>P/L, %</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>14:32:18</td><td>BTCUSDT</td><td style="color:var(--green);">buy</td>
+              <td>0.05</td><td>67 432.50</td><td>66 800.00</td><td>68 500.00</td>
+              <td>67 980.10</td><td class="pnl-pos">+27.38</td><td class="pnl-pos">+0.81%</td>
+            </tr>
+            <tr>
+              <td>12:08:44</td><td>ETHUSDT</td><td style="color:var(--red);">sell</td>
+              <td>0.30</td><td>3 845.20</td><td>3 900.00</td><td>3 750.00</td>
+              <td>3 821.50</td><td class="pnl-pos">+7.11</td><td class="pnl-pos">+0.62%</td>
+            </tr>
+            <tr>
+              <td>09:51:02</td><td>SOLUSDT</td><td style="color:var(--green);">buy</td>
+              <td>2.5</td><td>168.40</td><td>165.00</td><td>175.00</td>
+              <td>166.85</td><td class="pnl-neg">-3.88</td><td class="pnl-neg">-0.92%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <!-- orders -->
+      <div class="term-pane" data-pane="orders" hidden>
+        <table class="term-table">
+          <thead><tr>
+            <th>Время</th><th>Символ</th><th>Тип</th><th>Сторона</th>
+            <th>Цена</th><th>Размер</th><th>Статус</th>
+          </tr></thead>
+          <tbody>
+            <tr><td>14:31:50</td><td>BTCUSDT</td><td>Limit</td><td style="color:var(--green);">buy</td>
+                <td>67 200.00</td><td>0.02</td><td style="color:var(--accent);">Pending</td></tr>
+            <tr><td>11:14:22</td><td>ETHUSDT</td><td>Stop</td><td style="color:var(--red);">sell</td>
+                <td>3 900.00</td><td>0.30</td><td style="color:var(--accent);">Pending</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <!-- history -->
+      <div class="term-pane" data-pane="history" hidden>
+        <table class="term-table">
+          <thead><tr>
+            <th>Закрыт</th><th>Символ</th><th>Тип</th>
+            <th>Объём</th><th>Вход</th><th>Выход</th><th>P/L, $</th>
+          </tr></thead>
+          <tbody>
+            <tr><td>27.05 19:14</td><td>BTCUSDT</td><td style="color:var(--green);">buy</td>
+                <td>0.10</td><td>66 100.00</td><td>67 450.00</td><td class="pnl-pos">+135.00</td></tr>
+            <tr><td>27.05 11:32</td><td>SOLUSDT</td><td style="color:var(--red);">sell</td>
+                <td>5.0</td><td>171.20</td><td>168.80</td><td class="pnl-pos">+12.00</td></tr>
+            <tr><td>26.05 22:48</td><td>ETHUSDT</td><td style="color:var(--green);">buy</td>
+                <td>0.50</td><td>3 920.00</td><td>3 880.00</td><td class="pnl-neg">-20.00</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <!-- alerts -->
+      <div class="term-pane" data-pane="alerts" hidden>
+        <table class="term-table">
+          <thead><tr><th>Создан</th><th>Символ</th><th>Условие</th><th>Состояние</th></tr></thead>
+          <tbody>
+            <tr><td>14:00:00</td><td>BTCUSDT</td><td>Цена &gt; 68 500.00</td><td style="color:var(--accent);">Ожидание</td></tr>
+            <tr><td>13:42:15</td><td>SOLUSDT</td><td>RSI(14) &lt; 30</td><td style="color:var(--green);">Сработал в 14:18</td></tr>
+            <tr><td>13:20:00</td><td>ETHUSDT</td><td>Цена &lt; 3 800.00</td><td style="color:var(--accent);">Ожидание</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <!-- JOURNAL (active by default) -->
+      <div class="term-pane" data-pane="journal">
+        <div class="journal" id="journal"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status bar -->
+  <div class="status-bar">
+    <span class="ok">Bybit · Connected</span>
+    <span class="sep-dot">·</span>
+    <span>Latency: 42 ms</span>
+    <span class="sep-dot">·</span>
+    <span>Аккаунт: paper-trading</span>
+    <span class="sep-dot">·</span>
+    <span>Баланс: 10 248.50 USDT</span>
+    <span class="spacer" style="flex:1;"></span>
+    <span>UTC+3 · 14:32:18</span>
+  </div>
+</div>
+
+<script>
+/* ───────────────  Mock data  ─────────────── */
+const SYMBOLS = [
+  { sym: "BTCUSDT", bid: 67978.50, ask: 67980.10, ch: +1.21, vol: "1.42B", base: 67980, drift: 0.0006 },
+  { sym: "ETHUSDT", bid: 3820.75,  ask: 3821.50,  ch: -0.58, vol: "612M",  base: 3821,  drift: -0.0003 },
+  { sym: "SOLUSDT", bid: 166.82,   ask: 166.85,   ch: +3.42, vol: "248M",  base: 166.8, drift: 0.0014 },
+  { sym: "BNBUSDT", bid: 612.20,   ask: 612.30,   ch: +0.85, vol: "98M",   base: 612,   drift: 0.0004 },
+  { sym: "XRPUSDT", bid: 0.5421,   ask: 0.5423,   ch: -1.12, vol: "184M",  base: 0.542, drift: -0.0006 },
+  { sym: "DOGEUSDT",bid: 0.1382,   ask: 0.1384,   ch: +5.21, vol: "76M",   base: 0.138, drift: 0.0021 },
+  { sym: "ADAUSDT", bid: 0.4581,   ask: 0.4583,   ch: -0.32, vol: "48M",   base: 0.458, drift: -0.0002 },
+  { sym: "AVAXUSDT",bid: 36.21,    ask: 36.25,    ch: +2.18, vol: "52M",   base: 36.2,  drift: 0.0009 },
+  { sym: "DOTUSDT", bid: 7.82,     ask: 7.84,     ch: -0.91, vol: "31M",   base: 7.83,  drift: -0.0004 },
+  { sym: "LINKUSDT",bid: 14.55,    ask: 14.57,    ch: +1.42, vol: "62M",   base: 14.56, drift: 0.0007 },
+  { sym: "MATICUSDT",bid: 0.7421,  ask: 0.7425,   ch: +0.65, vol: "44M",   base: 0.742, drift: 0.0003 },
+  { sym: "ATOMUSDT",bid: 8.14,     ask: 8.16,     ch: -0.42, vol: "28M",   base: 8.15,  drift: -0.0002 },
+];
+
+/* deterministic pseudo-candle generator */
+function genCandles(n, start, drift, vol, seed) {
+  let s = seed;
+  function rnd() { s = (s * 9301 + 49297) % 233280; return s / 233280; }
+  const out = [];
+  let p = start;
+  for (let i = 0; i < n; i++) {
+    const r = (rnd() - 0.45) * vol + drift;
+    const open = p;
+    const close = open * (1 + r);
+    const range = Math.abs(close - open) + open * vol * (0.4 + rnd() * 1.3);
+    const high = Math.max(open, close) + range * (0.2 + rnd() * 0.6);
+    const low  = Math.min(open, close) - range * (0.2 + rnd() * 0.6);
+    const v = 800 + rnd() * 2400;
+    out.push({ open, high, low, close, volume: v });
+    p = close;
+  }
+  return out;
+}
+
+function sma(arr, period) {
+  const out = []; let sum = 0;
+  for (let i = 0; i < arr.length; i++) {
+    sum += arr[i];
+    if (i >= period) sum -= arr[i - period];
+    out.push(i >= period - 1 ? sum / period : null);
+  }
+  return out;
+}
+
+/* ───────────────  Chart renderer  ─────────────── */
+function renderChart(container, opts) {
+  container.querySelectorAll("svg.chart-svg").forEach(el => el.remove());
+
+  const w = container.clientWidth, h = container.clientHeight;
+  if (!w || !h) return;
+
+  const padL = 4, padR = 56, padT = 24, padB = opts.volume ? 60 : 20;
+  const innerW = w - padL - padR;
+  const innerH = h - padT - padB;
+  const volH = opts.volume ? Math.min(46, innerH * 0.22) : 0;
+  const priceH = innerH - (opts.volume ? volH + 4 : 0);
+
+  const candles = genCandles(opts.n, opts.start, opts.drift, opts.vol, opts.seed);
+
+  let lo = Infinity, hi = -Infinity;
+  for (const c of candles) { if (c.low < lo) lo = c.low; if (c.high > hi) hi = c.high; }
+  const span = hi - lo;
+  lo -= span * 0.08; hi += span * 0.08;
+  const range = hi - lo;
+
+  const cw = innerW / candles.length;
+  const bodyW = Math.max(1.5, cw * 0.66);
+
+  const css = getComputedStyle(document.body);
+  const C = {
+    grid: css.getPropertyValue("--grid").trim(),
+    fgMute: css.getPropertyValue("--fg-mute").trim(),
+    border: css.getPropertyValue("--border").trim(),
+    green: css.getPropertyValue("--green").trim(),
+    red: css.getPropertyValue("--red").trim(),
+    accent: css.getPropertyValue("--accent").trim(),
+  };
+
+  const yPrice = p => padT + (1 - (p - lo) / range) * priceH;
+  const xIdx   = i => padL + i * cw + cw / 2;
+
+  const ticks = h < 200 ? 4 : 6;
+  let svg = `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">`;
+
+  for (let i = 0; i <= ticks; i++) {
+    const y = padT + (priceH * i) / ticks;
+    const p = lo + range * (1 - i / ticks);
+    svg += `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${padL+innerW}" y2="${y.toFixed(1)}" stroke="${C.grid}" stroke-width="1"/>`;
+    const decimals = p < 1 ? 4 : p < 100 ? 2 : 1;
+    svg += `<text x="${padL+innerW+4}" y="${(y+3).toFixed(1)}" fill="${C.fgMute}" font-size="9.5" font-family="monospace">${p.toFixed(decimals)}</text>`;
+  }
+
+  /* SMA(20) */
+  const closes = candles.map(c => c.close);
+  const sma20 = sma(closes, 20);
+  let pathSma = "";
+  sma20.forEach((v, i) => {
+    if (v == null) return;
+    const x = xIdx(i), y = yPrice(v);
+    pathSma += (pathSma ? " L " : "M ") + x.toFixed(1) + " " + y.toFixed(1);
+  });
+  if (pathSma) svg += `<path d="${pathSma}" stroke="${C.accent}" stroke-width="1.2" fill="none" opacity="0.85"/>`;
+
+  candles.forEach((c, i) => {
+    const x = xIdx(i);
+    const up = c.close >= c.open;
+    const col = up ? C.green : C.red;
+    svg += `<line x1="${x.toFixed(1)}" y1="${yPrice(c.high).toFixed(1)}" x2="${x.toFixed(1)}" y2="${yPrice(c.low).toFixed(1)}" stroke="${col}" stroke-width="1"/>`;
+    const yO = yPrice(c.open), yC = yPrice(c.close);
+    const yTop = Math.min(yO, yC);
+    const bodyH = Math.max(1, Math.abs(yC - yO));
+    svg += `<rect x="${(x-bodyW/2).toFixed(1)}" y="${yTop.toFixed(1)}" width="${bodyW.toFixed(1)}" height="${bodyH.toFixed(1)}" fill="${col}" />`;
+  });
+
+  const last = candles[candles.length-1];
+  const yLast = yPrice(last.close);
+  const lastUp = last.close >= last.open;
+  svg += `<line x1="${padL}" y1="${yLast.toFixed(1)}" x2="${padL+innerW}" y2="${yLast.toFixed(1)}" stroke="${lastUp ? C.green : C.red}" stroke-width="1" stroke-dasharray="3,3" opacity="0.8"/>`;
+  const dec = last.close < 1 ? 4 : last.close < 100 ? 2 : 1;
+  svg += `<rect x="${padL+innerW+1}" y="${(yLast-8).toFixed(1)}" width="${padR-2}" height="16" fill="${lastUp ? C.green : C.red}" rx="2"/>`;
+  svg += `<text x="${(padL+innerW+padR/2)}" y="${(yLast+4).toFixed(1)}" fill="white" font-size="10" text-anchor="middle" font-family="monospace" font-weight="600">${last.close.toFixed(dec)}</text>`;
+
+  if (opts.volume) {
+    let maxV = 0; for (const c of candles) if (c.volume > maxV) maxV = c.volume;
+    const volTop = padT + priceH + 4;
+    svg += `<line x1="${padL}" y1="${volTop.toFixed(1)}" x2="${padL+innerW}" y2="${volTop.toFixed(1)}" stroke="${C.border}" stroke-width="1"/>`;
+    candles.forEach((c, i) => {
+      const x = xIdx(i);
+      const vh = (c.volume / maxV) * volH;
+      const up = c.close >= c.open;
+      svg += `<rect x="${(x-bodyW/2).toFixed(1)}" y="${(volTop+volH-vh).toFixed(1)}" width="${bodyW.toFixed(1)}" height="${vh.toFixed(1)}" fill="${up ? C.green : C.red}" opacity="0.5"/>`;
+    });
+  }
+
+  svg += `</svg>`;
+  container.insertAdjacentHTML("beforeend", svg);
+}
+
+/* ───────────────  Mosaic of charts  ─────────────── */
+const MOSAIC_CONFIG = [
+  { sym: "BTCUSDT", tf: "M15", base: 67000, drift: 0.0006, vol: 0.0042, seed: 42,  price: 67980.10, ch: +1.21 },
+  { sym: "ETHUSDT", tf: "H1",  base: 3800,  drift: -0.0003, vol: 0.005, seed: 71, price: 3821.50, ch: -0.58 },
+  { sym: "SOLUSDT", tf: "M5",  base: 168,   drift: 0.0014, vol: 0.006,  seed: 113, price: 166.85, ch: +3.42 },
+  { sym: "DOGEUSDT",tf: "M15", base: 0.135, drift: 0.0021, vol: 0.008,  seed: 199, price: 0.1384, ch: +5.21 },
+];
+
+function fmt(p) {
+  const d = p < 1 ? 4 : p < 100 ? 2 : 1;
+  return p.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+
+function buildMosaic(layout) {
+  const mosaic = document.getElementById("mosaic");
+  mosaic.className = "chart-mosaic layout-" + layout;
+  mosaic.innerHTML = "";
+  const count = layout === "1" ? 1 : layout === "2" ? 2 : 4;
+  for (let i = 0; i < count; i++) {
+    const cfg = MOSAIC_CONFIG[i];
+    const cell = document.createElement("div");
+    cell.className = "chart-cell" + (i === 0 ? " active" : "");
+    const dir = cfg.ch >= 0 ? "up" : "dn";
+    cell.innerHTML = `
+      <div class="chart-cell-head">
+        <span class="sym">${cfg.sym}</span>
+        <span class="tf">${cfg.tf}</span>
+        <span class="price">${fmt(cfg.price)}</span>
+        <span class="ch ${dir}">${cfg.ch>=0?"+":""}${cfg.ch.toFixed(2)}%</span>
+      </div>
+      <div class="chart-wrap"></div>
+    `;
+    mosaic.appendChild(cell);
+  }
+  rerenderMosaicCharts();
+}
+
+function rerenderMosaicCharts() {
+  const cells = document.querySelectorAll(".chart-cell");
+  cells.forEach((cell, i) => {
+    const cfg = MOSAIC_CONFIG[i];
+    const wrap = cell.querySelector(".chart-wrap");
+    const showVolume = cell.clientHeight > 220;
+    requestAnimationFrame(() => {
+      renderChart(wrap, {
+        n: showVolume ? 110 : 90,
+        start: cfg.base,
+        drift: cfg.drift,
+        vol: cfg.vol,
+        seed: cfg.seed,
+        volume: showVolume,
+      });
+    });
+  });
+}
+
+/* ───────────────  Market Watch  ─────────────── */
+function renderMW() {
+  document.getElementById("mw-list").innerHTML = SYMBOLS.map((s, i) => `
+    <div class="mw-row ${i===0?"active":""}">
+      <span class="sym">${s.sym}</span>
+      <span class="bid">${fmt(s.bid)}</span>
+      <span class="ask">${fmt(s.ask)}</span>
+    </div>
+  `).join("");
+}
+
+/* ───────────────  Orderbook  ─────────────── */
+function renderOrderbook() {
+  const mid = 67980.10;
+  const asks = [], bids = [];
+  let s = 7;
+  function rnd() { s = (s*9301+49297)%233280; return s/233280; }
+  for (let i = 0; i < 11; i++) {
+    asks.push({ p: mid + (i+1) * (0.4 + rnd()*0.8), q: 0.05 + rnd()*2.4 });
+  }
+  for (let i = 0; i < 11; i++) {
+    bids.push({ p: mid - 0.4 - i * (0.4 + rnd()*0.8), q: 0.05 + rnd()*2.4 });
+  }
+  asks.forEach(r => r.t = r.p * r.q);
+  bids.forEach(r => r.t = r.p * r.q);
+  const maxQ = Math.max(...asks.map(x => x.q), ...bids.map(x => x.q));
+  const row = (r, side) => `
+    <div class="ob-row ${side}" style="--bar-w:${(r.q/maxQ*100).toFixed(0)}%;">
+      <span class="price">${r.p.toFixed(1)}</span>
+      <span class="qty">${r.q.toFixed(3)}</span>
+      <span class="total">${(r.t/1000).toFixed(1)}k</span>
+    </div>`;
+  document.getElementById("ob-asks").innerHTML = asks.map(r => row(r, "ask")).join("");
+  document.getElementById("ob-bids").innerHTML = bids.map(r => row(r, "bid")).join("");
+  document.getElementById("ob-spread").innerHTML = `67 980.10 <span class="sub">≈ $67 980.10</span>`;
+}
+
+/* ───────────────  Journal  ─────────────── */
+function renderJournal() {
+  const lines = [
+    ["14:32:18", "ok",    `<span class="h">[bybit-ws]</span> kline.BTCUSDT.15 — обновлено, последняя свеча: O=67432.50 H=68120 L=67210 C=67980`],
+    ["14:32:14", "info",  `<span class="h">[event-bus]</span> CandleClosed(BTCUSDT, M15, 14:30:00)`],
+    ["14:32:00", "info",  `<span class="h">[indicators]</span> SMA(20) пересчитан для BTCUSDT.M15 → 67 540.20`],
+    ["14:31:50", "info",  `<span class="h">[order-mgr]</span> создан лимит-ордер #A1284: buy BTCUSDT 0.02 @ 67200.00`],
+    ["14:30:01", "ok",    `<span class="h">[bybit-rest]</span> /v5/account/wallet-balance → OK (42ms), balance: 10 248.50 USDT`],
+    ["14:18:33", "warn",  `<span class="h">[alerts]</span> сработал алерт #3: SOLUSDT RSI(14) &lt; 30`],
+    ["14:15:00", "info",  `<span class="h">[bot:grid]</span> Grid Bot tick — открытые слоты: 4/8, P&amp;L цикла: +12.40 USDT`],
+    ["14:10:22", "info",  `<span class="h">[bybit-ws]</span> ping → pong (38 ms)`],
+    ["14:00:00", "info",  `<span class="h">[alerts]</span> создан алерт: BTCUSDT &gt; 68 500.00`],
+    ["13:58:14", "error", `<span class="h">[bybit-rest]</span> /v5/market/kline → 500, retry 1/3 через 2s`],
+    ["13:58:16", "ok",    `<span class="h">[bybit-rest]</span> /v5/market/kline → OK после retry (1240ms)`],
+    ["13:42:15", "info",  `<span class="h">[alerts]</span> создан алерт: SOLUSDT RSI(14) &lt; 30`],
+    ["13:30:00", "ok",    `<span class="h">[app]</span> приложение запущено, версия 0.1.0`],
+  ];
+  document.getElementById("journal").innerHTML = lines.map(([ts, lvl, msg]) =>
+    `<div class="jrn"><span class="ts">${ts}</span><span class="lvl ${lvl}">${lvl.toUpperCase()}</span><span class="msg">${msg}</span></div>`
+  ).join("");
+}
+
+/* ───────────────  Tabs in terminal  ─────────────── */
+document.getElementById("term-tabs").addEventListener("click", e => {
+  const tab = e.target.closest(".tab");
+  if (!tab) return;
+  document.querySelectorAll("#term-tabs .tab").forEach(t => t.classList.toggle("active", t === tab));
+  document.querySelectorAll(".term-pane").forEach(p => p.hidden = p.dataset.pane !== tab.dataset.tab);
+});
+
+/* ───────────────  Switchers  ─────────────── */
+document.getElementById("theme-switcher").addEventListener("click", e => {
+  const btn = e.target.closest("button[data-theme]");
+  if (!btn) return;
+  document.querySelectorAll("#theme-switcher button").forEach(b => b.classList.toggle("active", b === btn));
+  document.body.dataset.theme = btn.dataset.theme;
+  rerenderMosaicCharts();
+});
+document.getElementById("layout-switcher").addEventListener("click", e => {
+  const btn = e.target.closest("button[data-layout]");
+  if (!btn) return;
+  document.querySelectorAll("#layout-switcher button").forEach(b => b.classList.toggle("active", b === btn));
+  buildMosaic(btn.dataset.layout);
+});
+
+/* ───────────────  Panel visibility toggles  ─────────────── */
+const PANEL_TARGETS = {
+  left:     ".col-left",
+  dom:      ".col-dom",
+  right:    ".col-right",
+  terminal: ".mt-terminal",
+};
+function togglePanel(name, btn) {
+  const el = document.querySelector(PANEL_TARGETS[name]);
+  if (!el) return;
+  const willHide = !el.classList.contains("hidden");
+  el.classList.toggle("hidden", willHide);
+  btn.classList.toggle("on", !willHide);
+  btn.classList.toggle("off", willHide);
+  requestAnimationFrame(rerenderMosaicCharts);
+}
+document.getElementById("panel-toggles").addEventListener("click", e => {
+  const btn = e.target.closest("button[data-panel]");
+  if (!btn) return;
+  togglePanel(btn.dataset.panel, btn);
+});
+
+/* keyboard shortcuts like in MT4: Ctrl+M / Ctrl+D / Ctrl+N / Ctrl+T */
+const SHORTCUTS = { m: "left", d: "dom", n: "right", t: "terminal" };
+document.addEventListener("keydown", e => {
+  if (!e.ctrlKey || e.altKey || e.shiftKey) return;
+  const name = SHORTCUTS[e.key.toLowerCase()];
+  if (!name) return;
+  e.preventDefault();
+  const btn = document.querySelector(`#panel-toggles button[data-panel="${name}"]`);
+  if (btn) togglePanel(name, btn);
+});
+
+window.addEventListener("resize", rerenderMosaicCharts);
+
+/* initial */
+renderMW();
+renderOrderbook();
+renderJournal();
+buildMosaic("4");
+</script>
+</body>
+</html>

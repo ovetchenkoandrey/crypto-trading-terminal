@@ -1,0 +1,92 @@
+:root {
+  --bg: #0d1117;
+  --bg-panel: #161b22;
+  --bg-panel-2: #1c2128;
+  --bg-input: #0d1117;
+  --bg-hover: #21262d;
+  --border: #30363d;
+  --border-soft: #21262d;
+  --fg: #e6edf3;
+  --fg-dim: #8b949e;
+  --fg-mute: #6e7681;
+  --accent: #f0b90b;
+  --accent-soft: rgba(240, 185, 11, 0.15);
+  --green: #26a69a;
+  --green-soft: rgba(38, 166, 154, 0.18);
+  --red: #ef5350;
+  --red-soft: rgba(239, 83, 80, 0.18);
+  --grid: #1f2630;
+}
+
+[data-theme="light"] {
+  --bg: #ffffff;
+  --bg-panel: #f7f8fa;
+  --bg-panel-2: #eef0f4;
+  --bg-input: #ffffff;
+  --bg-hover: #e7eaef;
+  --border: #d0d7de;
+  --border-soft: #e4e7eb;
+  --fg: #1e2329;
+  --fg-dim: #57606a;
+  --fg-mute: #8b949e;
+  --accent: #d48800;
+  --accent-soft: rgba(212, 136, 0, 0.15);
+  --green: #14a085;
+  --green-soft: rgba(20, 160, 133, 0.15);
+  --red: #d33a3a;
+  --red-soft: rgba(211, 58, 58, 0.15);
+  --grid: #eef0f4;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  margin: 0; padding: 0;
+  height: 100vh;
+  background: var(--bg);
+  color: var(--fg);
+  font: 12px/1.4 "Segoe UI", -apple-system, system-ui, sans-serif;
+  overflow: hidden;
+}
+
+/* === Boot screen (E0.1 only) === */
+.boot-screen {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  font-family: "Consolas", "Courier New", monospace;
+}
+.boot-brand {
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 2px;
+}
+.boot-sub {
+  font-size: 13px;
+  color: var(--fg-dim);
+  margin-bottom: 24px;
+}
+.boot-status {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  min-width: 380px;
+  padding: 16px 20px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.boot-line { color: var(--fg); font-variant-numeric: tabular-nums; }
+.boot-line .ok { color: var(--green); margin-right: 8px; }
+.boot-line .pending { color: var(--fg-mute); margin-right: 8px; }
+
+/* === Scrollbar === */
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: var(--bg); }
+*::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; }
+*::-webkit-scrollbar-thumb:hover { background: var(--fg-mute); }

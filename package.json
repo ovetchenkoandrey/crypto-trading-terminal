@@ -1,0 +1,53 @@
+{
+  "name": "trading-app",
+  "version": "0.1.0",
+  "description": "Crypto trading terminal — own take on MetaTrader, focused on Bybit",
+  "main": "dist-electron/main.js",
+  "type": "module",
+  "scripts": {
+    "dev:vite": "vite",
+    "dev:electron": "wait-on tcp:5173 && tsc -p electron/tsconfig.json && cross-env NODE_ENV=development electron .",
+    "dev": "concurrently -k -n vite,electron -c blue,green \"npm:dev:vite\" \"npm:dev:electron\"",
+    "build:vite": "vite build",
+    "build:electron": "tsc -p electron/tsconfig.json",
+    "build": "npm run build:vite && npm run build:electron",
+    "package": "npm run build && electron-builder --win --x64",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.4",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.2",
+    "concurrently": "^9.0.1",
+    "cross-env": "^7.0.3",
+    "electron": "^32.1.2",
+    "electron-builder": "^25.0.5",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.8",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.tradingapp.desktop",
+    "productName": "TradingApp",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": "x64"
+        }
+      ]
+    }
+  }
+}
