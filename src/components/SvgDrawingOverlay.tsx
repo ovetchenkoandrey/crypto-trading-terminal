@@ -145,6 +145,7 @@ export function SvgDrawingOverlay({
             selected={d.id === selectedId}
             onClick={() => onSelect(d.id)}
             allowClick={activeTool === "cursor"}
+            containerWidth={wrapRef.current?.clientWidth ?? 0}
           />
         ))}
         {draftPoint && hoverPoint && (activeTool === "trendline" || activeTool === "fib") && (
@@ -163,9 +164,10 @@ interface ShapeProps {
   selected: boolean;
   onClick: () => void;
   allowClick: boolean;
+  containerWidth: number;
 }
 
-function DrawingShape({ ctx, drawing, selected, onClick, allowClick }: ShapeProps) {
+function DrawingShape({ ctx, drawing, selected, onClick, allowClick, containerWidth }: ShapeProps) {
   const stroke = drawing.color;
   const sw = (drawing.lineWidth ?? 1) + (selected ? 1 : 0);
   const dash = selected ? "4 2" : undefined;
@@ -178,26 +180,27 @@ function DrawingShape({ ctx, drawing, selected, onClick, allowClick }: ShapeProp
     const y = ctx.series.priceToCoordinate(drawing.price);
     if (y === null) return null;
     const yn = y as number;
-    // Approximate label width so we can put a background pill on the right edge
     const priceText = drawing.price.toFixed(4);
+    const labelW = Math.max(48, priceText.length * 7 + 8);
+    const labelX = Math.max(0, containerWidth - labelW - 4);
     return (
       <g>
         {/* visible line spanning the chart width */}
-        <line x1={0} y1={yn} x2="100%" y2={yn}
+        <line x1={0} y1={yn} x2={containerWidth} y2={yn}
               stroke={stroke} strokeWidth={sw} strokeDasharray={dash}
               pointerEvents="none" />
         {/* fat invisible hit area */}
         {allowClick && (
-          <line x1={0} y1={yn} x2="100%" y2={yn} stroke="transparent" strokeWidth={HIT_DISTANCE * 2}
+          <line x1={0} y1={yn} x2={containerWidth} y2={yn} stroke="transparent" strokeWidth={HIT_DISTANCE * 2}
                 pointerEvents="stroke"
                 onClick={(e) => { e.stopPropagation(); onClick(); }}
                 style={{ cursor: "pointer" }} />
         )}
         {/* price label on the right side of the chart */}
         <g pointerEvents="none">
-          <rect x="calc(100% - 60px)" y={yn - 8} width={56} height={16}
+          <rect x={labelX} y={yn - 8} width={labelW} height={16}
                 fill={stroke} opacity={selected ? 1 : 0.85} rx={2} />
-          <text x="calc(100% - 32px)" y={yn + 3} fill="white" fontSize={10}
+          <text x={labelX + labelW / 2} y={yn + 3} fill="white" fontSize={10}
                 fontFamily="monospace" textAnchor="middle" fontWeight={600}>
             {priceText}
           </text>
