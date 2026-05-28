@@ -95,28 +95,25 @@ export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndic
         borderColor: border,
         timeVisible: true,
         secondsVisible: false,
-        // Only the LEFT edge is pinned (can't scroll past the first bar).
-        // Right side has an empty buffer (rightOffset) so dragging right doesn't auto-zoom.
-        fixLeftEdge: true,
-        rightOffset: 12,
+        // Small buffer on the right so the latest candle isn't glued to the price axis
+        rightOffset: 6,
         lockVisibleTimeRangeOnResize: true,
-        // Floor on bar width so we can't get stuck with hair-thin bars
         minBarSpacing: 2,
       },
-      // Mouse drag does NOTHING. Scroll only with mouse-wheel. Zoom only with Ctrl+wheel.
+      // Wheel = zoom (in/out). Mouse drag = horizontal scroll. Axis-drag does nothing.
       handleScale: {
-        axisPressedMouseMove: { time: false, price: false },
+        axisPressedMouseMove: { time: false, price: false }, // OFF — was stretching bars
         axisDoubleClickReset: false,
-        mouseWheel: false,
-        pinch: false,
+        mouseWheel: true,           // wheel = zoom
+        pinch: true,
       },
       handleScroll: {
-        mouseWheel: true,           // wheel = scroll along time axis
-        pressedMouseMove: false,    // dragging the chart body does nothing
-        horzTouchDrag: false,
+        mouseWheel: false,          // wheel reserved for zoom (above)
+        pressedMouseMove: true,     // drag = horizontal scroll
+        horzTouchDrag: true,
         vertTouchDrag: false,
       },
-      kineticScroll: { mouse: false, touch: false },
+      kineticScroll: { mouse: false, touch: true },
     });
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
@@ -215,24 +212,23 @@ export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndic
         timeVisible: true,
         secondsVisible: false,
         visible: true,
-        fixLeftEdge: true,
-        rightOffset: 12,
+        rightOffset: 6,
         lockVisibleTimeRangeOnResize: true,
         minBarSpacing: 2,
       },
       handleScale: {
         axisPressedMouseMove: { time: false, price: false },
         axisDoubleClickReset: false,
-        mouseWheel: false,
-        pinch: false,
+        mouseWheel: true,
+        pinch: true,
       },
       handleScroll: {
-        mouseWheel: true,
-        pressedMouseMove: false,
-        horzTouchDrag: false,
+        mouseWheel: false,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
         vertTouchDrag: false,
       },
-      kineticScroll: { mouse: false, touch: false },
+      kineticScroll: { mouse: false, touch: true },
     });
 
     paneChartRef.current = paneChart;
@@ -297,8 +293,13 @@ export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndic
     if (isInitial || bigJump) {
       candleSeries.setData(data.map(toCandle));
       volumeSeries.setData(data.map(toVol));
-      // Only fit content on first load — preserves user's scroll/zoom afterwards
-      if (isInitial) chart.timeScale().fitContent();
+      // Only fit content on first load — preserves user's scroll/zoom afterwards.
+      // Defer one frame so the chart definitely knows its post-layout size.
+      if (isInitial) {
+        requestAnimationFrame(() => {
+          chartRef.current?.timeScale().fitContent();
+        });
+      }
     } else {
       candleSeries.update(toCandle(last));
       volumeSeries.update(toVol(last));
