@@ -1,0 +1,132 @@
+// Centralised app settings — persisted in the Zustand store via `partialize`.
+
+export type FontScale = "sm" | "md" | "lg";
+export type ChartType = "candle" | "line" | "area";
+export type HistoryDepth = 200 | 500 | 1000;
+export type PnlMode    = "abs" | "pct";
+
+export interface AppearanceSettings {
+  // theme lives at the top-level store as before
+  accentColor:        string;
+  candleUpColor:      string;
+  candleDownColor:    string;
+  fontScale:          FontScale;
+}
+
+export interface ChartSettings {
+  defaultChartType:   ChartType;
+  defaultTimeframe:   string;       // bybit interval e.g. "15"
+  historyDepth:       HistoryDepth;
+  showVolume:         boolean;
+  showGrid:           boolean;
+  rightOffset:        number;       // bars after the last candle
+}
+
+export interface IndicatorDefaults {
+  sma:       { period: number; color: string };
+  ema:       { period: number; color: string };
+  rsi:       { period: number; color: string };
+  macd:      { fast: number; slow: number; signal: number; color: string };
+  bollinger: { period: number; stdDev: number; color: string };
+}
+
+export interface DrawingSettings {
+  defaultColor:               string;
+  defaultLineWidth:           1 | 2 | 3 | 4;
+  snapEnabled:                boolean;
+  snapThresholdPx:            number;
+  disableMagnetOnSelection:   boolean;   // turn off crosshair magnet when a drawing is selected
+}
+
+export interface PaperTradingSettings {
+  initialBalance:    number;
+  feeRate:           number;       // 0.001 = 0.1%
+  pnlMode:           PnlMode;
+}
+
+export interface NotificationSettings {
+  alertSound:        boolean;
+  nativePush:        boolean;
+  onCloseTrade:      boolean;
+  onBotOrder:        boolean;
+}
+
+export interface NetworkSettings {
+  backend:           "mainnet" | "testnet";
+  wsReconnectMs:     number;
+  restTimeoutMs:     number;
+}
+
+export type HistoryProvider = "bybit" | "binance" | "file";
+
+export interface HistoryDbSettings {
+  provider:          HistoryProvider;
+  // How far back to keep candles in the IndexedDB cache, per symbol/tf.
+  depthYears:        number;          // 0.5 / 1 / 2 / 5 / 0 (unlimited)
+  backgroundBackfill:boolean;
+  maxCacheMb:        number;          // soft cap on cache size
+}
+
+export interface Settings {
+  appearance:   AppearanceSettings;
+  chart:        ChartSettings;
+  indicators:   IndicatorDefaults;
+  drawings:     DrawingSettings;
+  paperTrading: PaperTradingSettings;
+  notifications:NotificationSettings;
+  network:      NetworkSettings;
+  historyDb:    HistoryDbSettings;
+}
+
+export const DEFAULT_SETTINGS: Settings = {
+  appearance: {
+    accentColor:     "#f0b90b",
+    candleUpColor:   "#26a69a",
+    candleDownColor: "#ef5350",
+    fontScale:       "md",
+  },
+  chart: {
+    defaultChartType: "candle",
+    defaultTimeframe: "15",
+    historyDepth:     1000,
+    showVolume:       true,
+    showGrid:         true,
+    rightOffset:      6,
+  },
+  indicators: {
+    sma:       { period: 20, color: "#f0b90b" },
+    ema:       { period: 20, color: "#58a6ff" },
+    rsi:       { period: 14, color: "#bb86fc" },
+    macd:      { fast: 12, slow: 26, signal: 9, color: "#26a69a" },
+    bollinger: { period: 20, stdDev: 2, color: "#ef5350" },
+  },
+  drawings: {
+    defaultColor:             "#f0b90b",
+    defaultLineWidth:         1,
+    snapEnabled:              true,
+    snapThresholdPx:          10,
+    disableMagnetOnSelection: true,
+  },
+  paperTrading: {
+    initialBalance: 10000,
+    feeRate:        0.001,
+    pnlMode:        "abs",
+  },
+  notifications: {
+    alertSound:   true,
+    nativePush:   false,
+    onCloseTrade: true,
+    onBotOrder:   false,
+  },
+  network: {
+    backend:       "mainnet",
+    wsReconnectMs: 3000,
+    restTimeoutMs: 10000,
+  },
+  historyDb: {
+    provider:           "bybit",
+    depthYears:         1,
+    backgroundBackfill: false,
+    maxCacheMb:         500,
+  },
+};

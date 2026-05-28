@@ -5,6 +5,9 @@ import type { SymbolMeta } from "./symbols";
 import { DEFAULT_SYMBOLS } from "./symbols";
 import type { Drawing, DrawingTool } from "./drawings/types";
 export type { Drawing, DrawingTool } from "./drawings/types";
+import type { Settings } from "./settings";
+import { DEFAULT_SETTINGS } from "./settings";
+export type { Settings } from "./settings";
 
 export type PanelKey = "marketWatch" | "orderBook" | "navigator" | "terminal";
 export type PanelsState = Record<PanelKey, boolean>;
@@ -121,6 +124,7 @@ interface PersistedSlice {
   mosaicCells: MosaicCell[];
   watchlist: string[];
   currentTool: DrawingTool;        // active drawing tool (top-level; affects whichever cell user clicks in)
+  settings: Settings;
   paperBalance: number;
   paperPositions: PaperPosition[];
   paperOrders: PaperOrder[];
@@ -177,7 +181,13 @@ interface Actions {
   removeBot: (id: string) => void;
 
   setAllSymbols: (arr: SymbolMeta[]) => void;
+
+  updateSettings: (partial: PartialDeep<Settings>) => void;
+  resetSettings: () => void;
 }
+
+// minimal recursive partial for settings updates
+type PartialDeep<T> = T extends object ? { [K in keyof T]?: PartialDeep<T[K]> } : T;
 
 type Store = PersistedSlice & VolatileSlice & Actions;
 
@@ -201,7 +211,26 @@ const DEFAULT_PERSISTED: PersistedSlice = {
   paperOrders: [],
   paperHistory: [],
   botConfigs: [],
+  settings: DEFAULT_SETTINGS,
 };
+
+// deep-merge helper for partial settings updates
+function mergeDeep<T>(base: T, patch: unknown): T {
+  if (typeof base !== "object" || base === null) return patch as T;
+  if (!patch || typeof patch !== "object" || Array.isArray(patch)) return base;
+  const out: Record<string, unknown> = { ...(base as Record<string, unknown>) };
+  const p = patch as Record<string, unknown>;
+  for (const k of Object.keys(p)) {
+    const bv = (base as Record<string, unknown>)[k];
+    const pv = p[k];
+    if (pv && typeof pv === "object" && !Array.isArray(pv) && bv && typeof bv === "object" && !Array.isArray(bv)) {
+      out[k] = mergeDeep(bv, pv);
+    } else if (pv !== undefined) {
+      out[k] = pv;
+    }
+  }
+  return out as T;
+}
 
 const DEFAULT_VOLATILE: VolatileSlice = {
   tickers: {},
@@ -383,6 +412,9 @@ export const useStore = create<Store>()(
       removeBot: (id) => set((s) => ({ botConfigs: s.botConfigs.filter((b) => b.id !== id) })),
 
       setAllSymbols: (arr) => set({ allSymbols: arr }),
+
+      updateSettings: (partial) => set((s) => ({ settings: mergeDeep(s.settings, partial) })),
+      resetSettings: () => set({ settings: DEFAULT_SETTINGS }),
     }),
     {
       name: "trading-app-store",
@@ -397,6 +429,7 @@ export const useStore = create<Store>()(
         currentTool: state.currentTool,
         mosaicCells: state.mosaicCells,
         watchlist: state.watchlist,
+        settings: state.settings,
         paperBalance: state.paperBalance,
         paperPositions: state.paperPositions,
         paperOrders: state.paperOrders,

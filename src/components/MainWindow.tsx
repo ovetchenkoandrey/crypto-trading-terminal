@@ -26,11 +26,23 @@ export function MainWindow() {
   const togglePanel = useStore((s) => s.togglePanel);
   const setTheme    = useStore((s) => s.setTheme);
   const activeSymbol = useStore((s) => s.activeSymbol);
+  const settings     = useStore((s) => s.settings);
 
   // Theme attribute on body
   useEffect(() => {
     document.body.dataset.theme = theme;
   }, [theme]);
+
+  // Apply user-customisable colors and font scale as CSS variables on <body>.
+  // Inline body styles win over :root values from global.css.
+  useEffect(() => {
+    const s = settings.appearance;
+    const FONT_SCALE = { sm: 0.9, md: 1, lg: 1.15 } as const;
+    document.body.style.setProperty("--accent", s.accentColor);
+    document.body.style.setProperty("--green",  s.candleUpColor);
+    document.body.style.setProperty("--red",    s.candleDownColor);
+    document.body.style.setProperty("--font-scale", String(FONT_SCALE[s.fontScale]));
+  }, [settings.appearance]);
 
   // Init WS + paper engine + bot manager once + load full symbol list
   useEffect(() => {

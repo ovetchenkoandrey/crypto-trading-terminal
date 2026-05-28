@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { useStore } from "../lib/store";
 import type { PanelKey, LayoutKey, DrawingTool } from "../lib/store";
 import { TIMEFRAMES } from "../lib/symbols";
+import { SettingsDialog } from "./SettingsDialog";
 
 const PANEL_BTNS: { key: PanelKey; icon: string; title: string }[] = [
   { key: "orderBook", icon: "📊", title: "Стакан / DOM (Ctrl+D)" },
@@ -26,6 +28,7 @@ export function Toolbar() {
   const setTheme     = useStore((s) => s.setTheme);
   const currentTool    = useStore((s) => s.currentTool);
   const setCurrentTool = useStore((s) => s.setCurrentTool);
+  const [showSettings, setShowSettings] = useState(false);
 
   const LAYOUTS: { key: LayoutKey; label: string }[] = [
     { key: "1", label: "1×1" },
@@ -110,7 +113,9 @@ export function Toolbar() {
         ))}
       </div>
 
-      <button className="btn">⚙ Настройки</button>
+      <button className="btn" onClick={() => setShowSettings(true)}>⚙ Настройки</button>
+
+      {showSettings && <SettingsDialog onClose={() => setShowSettings(false)} />}
     </div>
   );
 }
