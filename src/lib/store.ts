@@ -111,8 +111,9 @@ export interface ConnectionState {
 interface PersistedSlice {
   theme: Theme;
   panels: PanelsState;
-  activeSymbol: string;
-  timeframe: string;
+  activeSymbol: string;            // mirror of mosaicCells[activeCellIndex].symbol
+  timeframe: string;               // mirror of mosaicCells[activeCellIndex].timeframe
+  activeCellIndex: number;
   layout: LayoutKey;
   mosaicCells: MosaicCell[];
   watchlist: string[];
@@ -137,6 +138,7 @@ interface Actions {
   togglePanel: (k: PanelKey) => void;
   setActiveSymbol: (s: string) => void;
   setTimeframe: (tf: string) => void;
+  setActiveCellIndex: (i: number) => void;
   setLayout: (l: LayoutKey) => void;
   setMosaicCell: (i: number, partial: Partial<MosaicCell>) => void;
   addIndicator: (cellIndex: number, ind: ActiveIndicator) => void;
@@ -174,6 +176,7 @@ const DEFAULT_PERSISTED: PersistedSlice = {
   panels: { marketWatch: true, orderBook: true, navigator: true, terminal: true },
   activeSymbol: "BTCUSDT",
   timeframe: "15",
+  activeCellIndex: 0,
   layout: "1",
   mosaicCells: [
     { symbol: "BTCUSDT",  timeframe: "15", indicators: [] },
@@ -211,21 +214,34 @@ export const useStore = create<Store>()(
       setTheme: (t) => set({ theme: t }),
       togglePanel: (k) => set((s) => ({ panels: { ...s.panels, [k]: !s.panels[k] } })),
       setActiveSymbol: (sym) => set((s) => {
+        const idx = s.activeCellIndex;
         const cells = [...s.mosaicCells];
-        cells[0] = { ...cells[0], symbol: sym };
+        const cell = cells[idx];
+        if (!cell) return s;
+        cells[idx] = { ...cell, symbol: sym };
         return { activeSymbol: sym, mosaicCells: cells };
       }),
       setTimeframe: (tf) => set((s) => {
+        const idx = s.activeCellIndex;
         const cells = [...s.mosaicCells];
-        cells[0] = { ...cells[0], timeframe: tf };
+        const cell = cells[idx];
+        if (!cell) return s;
+        cells[idx] = { ...cell, timeframe: tf };
         return { timeframe: tf, mosaicCells: cells };
+      }),
+      setActiveCellIndex: (i) => set((s) => {
+        const cell = s.mosaicCells[i];
+        if (!cell) return s;
+        // Top-level activeSymbol/timeframe mirror the now-active cell
+        return { activeCellIndex: i, activeSymbol: cell.symbol, timeframe: cell.timeframe };
       }),
       setLayout: (l) => set({ layout: l }),
       setMosaicCell: (i, partial) => set((s) => {
         const cells = [...s.mosaicCells];
         cells[i] = { ...cells[i], ...partial };
         const update: Partial<Store> = { mosaicCells: cells };
-        if (i === 0) {
+        // Mirror to top-level only if changing the currently-active cell
+        if (i === s.activeCellIndex) {
           if (partial.symbol) update.activeSymbol = partial.symbol;
           if (partial.timeframe) update.timeframe = partial.timeframe;
         }
@@ -332,6 +348,7 @@ export const useStore = create<Store>()(
         panels: state.panels,
         activeSymbol: state.activeSymbol,
         timeframe: state.timeframe,
+        activeCellIndex: state.activeCellIndex,
         layout: state.layout,
         mosaicCells: state.mosaicCells,
         watchlist: state.watchlist,

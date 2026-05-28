@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useStore } from "../lib/store";
+// activeCellIndex now lives in the store so the toolbar's TF picker can target it.
 import { ChartPane } from "./ChartPane";
 import { fetchKlines } from "../lib/bybit";
 import { ws } from "../lib/bybitWs";
@@ -16,13 +17,14 @@ export function ChartMosaic() {
   const cells     = useStore((s) => s.mosaicCells);
   const candles   = useStore((s) => s.candles);
   const tickers   = useStore((s) => s.tickers);
-  const setCandles      = useStore((s) => s.setCandles);
-  const setMosaicCell   = useStore((s) => s.setMosaicCell);
-  const addIndicator    = useStore((s) => s.addIndicator);
-  const removeIndicator = useStore((s) => s.removeIndicator);
-  const updateIndicator = useStore((s) => s.updateIndicator);
+  const setCandles         = useStore((s) => s.setCandles);
+  const setMosaicCell      = useStore((s) => s.setMosaicCell);
+  const addIndicator       = useStore((s) => s.addIndicator);
+  const removeIndicator    = useStore((s) => s.removeIndicator);
+  const updateIndicator    = useStore((s) => s.updateIndicator);
+  const activeCell         = useStore((s) => s.activeCellIndex);
+  const setActiveCellIndex = useStore((s) => s.setActiveCellIndex);
 
-  const [activeCell, setActiveCell] = useState(0);
   const [pickerCell, setPickerCell] = useState<number | null>(null);
 
   const count   = layout === "1" ? 1 : layout === "2" ? 2 : 4;
@@ -71,7 +73,7 @@ export function ChartMosaic() {
             <div
               key={`${i}-${key}`}
               className={"chart-cell" + (isActive ? " active" : "")}
-              onClick={() => setActiveCell(i)}
+              onClick={() => setActiveCellIndex(i)}
             >
               <div
                 className="chart-cell-head"
