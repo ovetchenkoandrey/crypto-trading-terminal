@@ -1,6 +1,6 @@
 import type { Candle } from "../types";
 
-export type IndicatorKind = "sma" | "ema" | "rsi" | "macd" | "bollinger";
+export type IndicatorKind = "sma" | "ema" | "rsi" | "macd" | "bollinger" | "stochastic" | "atr";
 export type IndicatorRegion = "overlay" | "pane";
 
 export interface IndicatorDef {

@@ -15,6 +15,8 @@ const DRAGGABLE_INDICATORS: { label: string; kind: string }[] = [
   { label: "RSI", kind: "rsi" },
   { label: "MACD", kind: "macd" },
   { label: "Bollinger Bands", kind: "bollinger" },
+  { label: "Stochastic", kind: "stochastic" },
+  { label: "ATR", kind: "atr" },
 ];
 
 const BOT_TEMPLATES: { label: string; kind: string; available: boolean }[] = [
@@ -60,8 +62,6 @@ export function Navigator() {
             <span className="ico">📈</span>{label}
           </div>
         ))}
-        <div className="nav-item disabled"><span className="ico">📈</span>Stochastic</div>
-        <div className="nav-item disabled"><span className="ico">📈</span>ATR</div>
         <div className="nav-item disabled"><span className="ico">📈</span>Volume Profile</div>
 
         <div className="nav-cat"><span className="chev">▾</span>🤖 Создать бота</div>

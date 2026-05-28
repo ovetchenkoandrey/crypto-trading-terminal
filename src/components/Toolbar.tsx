@@ -3,6 +3,9 @@ import { useStore } from "../lib/store";
 import type { PanelKey, LayoutKey, DrawingTool } from "../lib/store";
 import { TIMEFRAMES } from "../lib/symbols";
 import { SettingsDialog } from "./SettingsDialog";
+import { IndicatorPicker } from "./IndicatorPicker";
+import { INDICATORS } from "../lib/indicators/registry";
+import { exportLayout, importLayoutFromFile } from "../lib/layoutIO";
 
 const PANEL_BTNS: { key: PanelKey; icon: string; title: string }[] = [
   { key: "orderBook", icon: "📊", title: "Стакан / DOM (Ctrl+D)" },
@@ -31,7 +34,9 @@ export function Toolbar() {
   const activeIndex    = useStore((s) => s.activeCellIndex);
   const activeChartType = useStore((s) => s.mosaicCells[s.activeCellIndex]?.chartType ?? s.settings.chart.defaultChartType);
   const setMosaicCell  = useStore((s) => s.setMosaicCell);
+  const addIndicator   = useStore((s) => s.addIndicator);
   const [showSettings, setShowSettings] = useState(false);
+  const [showIndicatorPicker, setShowIndicatorPicker] = useState(false);
 
   const LAYOUTS: { key: LayoutKey; label: string }[] = [
     { key: "1", label: "1×1" },
@@ -41,8 +46,8 @@ export function Toolbar() {
 
   return (
     <div className="toolbar">
-      <button className="icon-btn" title="Новый график">📊</button>
-      <button className="icon-btn" title="Сохранить">💾</button>
+      <button className="icon-btn" title="Импорт раскладки из JSON" onClick={() => importLayoutFromFile()}>📂</button>
+      <button className="icon-btn" title="Экспорт раскладки в JSON" onClick={() => exportLayout()}>💾</button>
       <span className="sep" />
       <button className={"icon-btn" + (activeChartType === "candle" ? " active" : "")}
               title="Свечи (для активной ячейки)"
@@ -66,6 +71,27 @@ export function Toolbar() {
       ))}
 
       <span className="sep" />
+      <div style={{ position: "relative", display: "inline-block" }}>
+        <button
+          className={"icon-btn" + (showIndicatorPicker ? " active" : "")}
+          title="Добавить индикатор на активную ячейку"
+          onClick={() => setShowIndicatorPicker((v) => !v)}
+        >𝑓</button>
+        {showIndicatorPicker && (
+          <IndicatorPicker
+            onPick={(kind) => {
+              const def = INDICATORS[kind];
+              addIndicator(activeIndex, {
+                id: crypto.randomUUID(),
+                kind,
+                params: { ...def.defaultParams },
+                color: def.defaultColor,
+              });
+            }}
+            onClose={() => setShowIndicatorPicker(false)}
+          />
+        )}
+      </div>
       <button
         className="icon-btn"
         title="Прокрутить к текущему моменту"

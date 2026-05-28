@@ -455,6 +455,45 @@ button { font-family: inherit; }
 .nav-item.disabled:hover { background: transparent; }
 
 /* ───────────── Bot config dialog ───────────── */
+/* ───────────── Indicator picker popup (from 𝑓 button) ───────────── */
+.indicator-picker {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 100;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 12px 36px rgba(0,0,0,0.5);
+  min-width: 220px;
+  overflow: hidden;
+}
+.indicator-picker-head {
+  padding: 8px 12px;
+  background: var(--bg-panel-2);
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 11px;
+  color: var(--fg-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+.indicator-picker-row {
+  display: grid;
+  grid-template-columns: 12px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 12px;
+  cursor: pointer;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.indicator-picker-row:hover { background: var(--bg-hover); }
+.indicator-picker-row:last-child { border-bottom: 0; }
+.indicator-picker-row .ind-color { width: 10px; height: 10px; border-radius: 50%; }
+.indicator-picker-row .ind-name  { color: var(--fg); }
+.indicator-picker-row .ind-region { color: var(--fg-mute); font-size: 10.5px; text-transform: uppercase; }
+
 /* ───────────── Indicator badges on chart ───────────── */
 .ind-badges {
   position: absolute;
