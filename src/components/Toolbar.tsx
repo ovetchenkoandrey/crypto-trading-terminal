@@ -3,10 +3,9 @@ import type { PanelKey, LayoutKey } from "../lib/store";
 import { TIMEFRAMES } from "../lib/symbols";
 
 const PANEL_BTNS: { key: PanelKey; icon: string; title: string }[] = [
-  { key: "marketWatch", icon: "👁", title: "Обзор рынка (Ctrl+M)" },
-  { key: "orderBook",   icon: "📊", title: "Стакан / DOM (Ctrl+D)" },
-  { key: "navigator",   icon: "🤖", title: "Навигатор (Ctrl+N)" },
-  { key: "terminal",    icon: "📋", title: "Терминал (Ctrl+T)" },
+  { key: "orderBook", icon: "📊", title: "Стакан / DOM (Ctrl+D)" },
+  { key: "navigator", icon: "🤖", title: "Навигатор (Ctrl+N)" },
+  { key: "terminal",  icon: "📋", title: "Терминал (Ctrl+T)" },
 ];
 
 export function Toolbar() {

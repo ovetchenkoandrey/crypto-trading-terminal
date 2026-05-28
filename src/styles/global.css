@@ -810,38 +810,71 @@ button { font-family: inherit; }
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 16px 48px rgba(0,0,0,0.5);
-  width: 320px;
+  width: 520px;
   display: flex;
   flex-direction: column;
-  max-height: 60vh;
+  max-height: 70vh;
   overflow: hidden;
 }
-.symbol-picker-head { padding: 10px; border-bottom: 1px solid var(--border-soft); }
+.symbol-picker-head { padding: 10px; border-bottom: 1px solid var(--border-soft); display: flex; flex-direction: column; gap: 8px; }
 .symbol-picker-search {
   width: 100%;
   background: var(--bg-input);
   border: 1px solid var(--border);
   color: var(--fg);
   padding: 6px 10px;
-  font-size: 12px;
+  font-size: 13px;
   border-radius: 4px;
   font-family: inherit;
   outline: none;
 }
 .symbol-picker-search:focus { border-color: var(--accent); }
+.symbol-picker-filter { display: flex; gap: 4px; }
+.symbol-picker-filter button {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--fg-dim);
+  padding: 4px 10px;
+  font-size: 11px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.symbol-picker-filter button:hover { background: var(--bg-hover); color: var(--fg); }
+.symbol-picker-filter button.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.symbol-picker-filter .sp-count { color: var(--fg-mute); font-size: 10px; }
 .symbol-picker-list { flex: 1; overflow: auto; }
 .symbol-picker-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 44px 1fr 90px 90px 60px;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
   padding: 7px 14px;
   cursor: pointer;
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 .symbol-picker-row:hover { background: var(--bg-hover); }
 .symbol-picker-row.active { background: var(--accent-soft); }
-.sp-sym { font-weight: 600; color: var(--fg); }
+.sp-cat {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 2px 5px;
+  border-radius: 3px;
+  text-align: center;
+}
+.sp-cat.spot   { background: rgba(38, 166, 154, 0.18); color: var(--green); }
+.sp-cat.linear { background: rgba(240, 185, 11, 0.18); color: var(--accent); }
+.sp-sym  { font-weight: 600; color: var(--fg); }
 .sp-base { color: var(--fg-mute); font-size: 11px; }
+.sp-price { color: var(--fg); text-align: right; }
+.sp-ch    { font-size: 11px; text-align: right; padding: 1px 5px; border-radius: 3px; }
+.sp-ch.up { color: var(--green); background: rgba(38, 166, 154, 0.12); }
+.sp-ch.dn { color: var(--red);   background: rgba(239, 83, 80, 0.12); }
 .sp-empty { padding: 16px; text-align: center; color: var(--fg-mute); font-size: 12px; }
 .symbol-picker-tfs {
   display: flex;
@@ -852,7 +885,17 @@ button { font-family: inherit; }
   background: var(--bg-panel-2);
 }
 
-/* ───────────── Chart cell picker caret ───────────── */
+/* ───────────── Chart cell symbol/picker ───────────── */
+.chart-cell-head .sym-clickable {
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.chart-cell-head .sym-clickable:hover {
+  background: var(--bg-hover);
+  color: var(--accent);
+}
+
 .cell-picker-caret {
   margin-left: auto;
   background: transparent;

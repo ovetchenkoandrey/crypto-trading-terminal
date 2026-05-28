@@ -28,23 +28,28 @@ export function ChartMosaic() {
   const count   = layout === "1" ? 1 : layout === "2" ? 2 : 4;
   const visible = cells.slice(0, count);
 
-  // For each visible cell, ensure we have klines loaded and WS subscribed
+  // For each visible cell, ensure we have klines loaded and WS subscribed (kline + ticker)
   useEffect(() => {
-    const wantedTopics = new Set<string>();
+    const wantedKline = new Set<string>();
+    const wantedTickers = new Set<string>();
     for (const c of visible) {
       const key = `${c.symbol}.${c.timeframe}`;
-      wantedTopics.add(`kline.${c.timeframe}.${c.symbol}`);
+      wantedKline.add(`kline.${c.timeframe}.${c.symbol}`);
+      wantedTickers.add(`tickers.${c.symbol}`);
       if (!candles[key] || candles[key].length === 0) {
         fetchKlines(c.symbol, c.timeframe as Interval, 200)
           .then((data) => setCandles(key, data))
           .catch((err: unknown) => logError("rest", `klines ${c.symbol}.${c.timeframe}: ${err instanceof Error ? err.message : String(err)}`));
       }
-      ws.subscribe(`kline.${c.timeframe}.${c.symbol}`);
+      ws.subscribe(`kline.${c.timeframe}.${c.symbol}`, c.symbol);
+      ws.subscribe(`tickers.${c.symbol}`, c.symbol);
     }
     return () => {
       for (const c of visible) {
-        const topic = `kline.${c.timeframe}.${c.symbol}`;
-        if (!wantedTopics.has(topic)) ws.unsubscribe(topic);
+        const klTopic  = `kline.${c.timeframe}.${c.symbol}`;
+        const tkTopic  = `tickers.${c.symbol}`;
+        if (!wantedKline.has(klTopic))   ws.unsubscribe(klTopic, c.symbol);
+        if (!wantedTickers.has(tkTopic)) ws.unsubscribe(tkTopic, c.symbol);
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -72,7 +77,11 @@ export function ChartMosaic() {
                 className="chart-cell-head"
                 onDoubleClick={() => setPickerCell(i)}
               >
-                <span className="sym">{cell.symbol}</span>
+                <span
+                  className="sym sym-clickable"
+                  onClick={(e) => { e.stopPropagation(); setPickerCell(i); }}
+                  title="Сменить инструмент"
+                >{cell.symbol}</span>
                 <span className="tf">{tfLabel(cell.timeframe)}</span>
                 {ticker && (
                   <>

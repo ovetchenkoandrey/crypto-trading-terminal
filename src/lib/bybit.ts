@@ -1,8 +1,14 @@
 import { RestClientV5 } from "bybit-api";
 import type { Candle, Interval } from "./types";
+import { useStore } from "./store";
+import type { Category } from "./symbols";
 
-// Single shared client — no auth needed for public endpoints
 const client = new RestClientV5();
+
+function resolveCategory(symbol: string): Category {
+  const meta = useStore.getState().allSymbols.find((s) => s.symbol === symbol);
+  return meta?.category ?? "spot";
+}
 
 export async function fetchKlines(
   symbol: string,
@@ -10,7 +16,7 @@ export async function fetchKlines(
   limit: number = 200
 ): Promise<Candle[]> {
   const res = await client.getKline({
-    category: "spot",
+    category: resolveCategory(symbol),
     symbol,
     interval,
     limit,

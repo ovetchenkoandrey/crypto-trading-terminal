@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { Candle } from "./types";
+import type { SymbolMeta } from "./symbols";
+import { DEFAULT_SYMBOLS } from "./symbols";
 
 export type PanelKey = "marketWatch" | "orderBook" | "navigator" | "terminal";
 export type PanelsState = Record<PanelKey, boolean>;
@@ -127,6 +129,7 @@ interface VolatileSlice {
   candles: Record<string, Candle[]>;
   journal: JournalEntry[];
   connection: ConnectionState;
+  allSymbols: SymbolMeta[];          // loaded from Bybit on startup (spot + linear)
 }
 
 interface Actions {
@@ -160,6 +163,8 @@ interface Actions {
   resetPaperAccount: () => void;
   upsertBot: (b: BotConfig) => void;
   removeBot: (id: string) => void;
+
+  setAllSymbols: (arr: SymbolMeta[]) => void;
 }
 
 type Store = PersistedSlice & VolatileSlice & Actions;
@@ -190,6 +195,7 @@ const DEFAULT_VOLATILE: VolatileSlice = {
   candles: {},
   journal: [],
   connection: { connected: false, latencyMs: null },
+  allSymbols: DEFAULT_SYMBOLS,        // fallback until REST loads the full list
 };
 
 function sortLevels(side: "asks" | "bids", levels: OrderbookLevel[]): OrderbookLevel[] {
@@ -315,6 +321,8 @@ export const useStore = create<Store>()(
         return { botConfigs: next };
       }),
       removeBot: (id) => set((s) => ({ botConfigs: s.botConfigs.filter((b) => b.id !== id) })),
+
+      setAllSymbols: (arr) => set({ allSymbols: arr }),
     }),
     {
       name: "trading-app-store",

@@ -47,10 +47,9 @@ export function MenuBar() {
   }, [open]);
 
   const PANEL_ITEMS: { key: PanelKey; label: string }[] = [
-    { key: "marketWatch", label: "Market Watch (Ctrl+M)" },
-    { key: "orderBook",   label: "Стакан (Ctrl+D)"        },
-    { key: "navigator",   label: "Навигатор (Ctrl+N)"     },
-    { key: "terminal",    label: "Терминал (Ctrl+T)"      },
+    { key: "orderBook", label: "Стакан (Ctrl+D)"    },
+    { key: "navigator", label: "Навигатор (Ctrl+N)" },
+    { key: "terminal",  label: "Терминал (Ctrl+T)"  },
   ];
 
   const LAYOUT_ITEMS: { key: LayoutKey; label: string }[] = [
