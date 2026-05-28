@@ -1,5 +1,5 @@
 import { useEffect, useReducer, useRef, useState } from "react";
-import type { IChartApi, ISeriesApi, IPriceLine } from "lightweight-charts";
+import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import type { Drawing, DrawingPoint, DrawingTool, HLineDrawing, TrendLineDrawing, FibDrawing, TextDrawing } from "../lib/drawings/types";
 import { DEFAULT_FIB_LEVELS, newId } from "../lib/drawings/types";
 import { chartToPixel, pixelToChart } from "../lib/drawings/renderer/IDrawingRenderer";
@@ -24,7 +24,6 @@ export function SvgDrawingOverlay({
   onCreate, onSelect, onDelete, onToolDone,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
-  const priceLinesRef = useRef<Map<string, IPriceLine>>(new Map());
   const [, force] = useReducer((x: number) => x + 1, 0);
   const [draftPoint, setDraftPoint] = useState<DrawingPoint | null>(null);
   const [hoverPoint, setHoverPoint] = useState<DrawingPoint | null>(null);
@@ -45,50 +44,6 @@ export function SvgDrawingOverlay({
       ro.disconnect();
     };
   }, [chart]);
-
-  // Sync hlines as native priceLines (they're guaranteed visible, with a label on the price axis)
-  useEffect(() => {
-    const want = new Map<string, HLineDrawing>();
-    for (const d of drawings) if (d.kind === "hline") want.set(d.id, d);
-
-    // Remove gone
-    for (const [id, line] of priceLinesRef.current) {
-      if (!want.has(id)) {
-        try { series.removePriceLine(line); } catch { /* may already be detached */ }
-        priceLinesRef.current.delete(id);
-      }
-    }
-    // Add new (don't try to update existing — replace)
-    for (const [id, d] of want) {
-      if (priceLinesRef.current.has(id)) {
-        // Remove and re-add if price changed
-        const existing = priceLinesRef.current.get(id);
-        if (existing) {
-          existing.applyOptions({ price: d.price, color: d.color, lineWidth: (d.lineWidth ?? 1) as 1 | 2 | 3 | 4 });
-        }
-      } else {
-        const pl = series.createPriceLine({
-          price: d.price,
-          color: d.color,
-          lineWidth: (d.lineWidth ?? 1) as 1 | 2 | 3 | 4,
-          lineStyle: 0,
-          axisLabelVisible: true,
-          title: "",
-        });
-        priceLinesRef.current.set(id, pl);
-      }
-    }
-  }, [drawings, series]);
-
-  // Cleanup priceLines on unmount
-  useEffect(() => {
-    return () => {
-      for (const line of priceLinesRef.current.values()) {
-        try { series.removePriceLine(line); } catch { /* noop */ }
-      }
-      priceLinesRef.current.clear();
-    };
-  }, [series]);
 
   // Delete-key on selected drawing
   useEffect(() => {
@@ -220,9 +175,35 @@ function DrawingShape({ ctx, drawing, selected, onClick, allowClick }: ShapeProp
   void dash;
 
   if (drawing.kind === "hline") {
-    // HLines are drawn as native lightweight-charts priceLines (always visible,
-    // with a label on the price axis). The SVG renderer just skips them.
-    return null;
+    const y = ctx.series.priceToCoordinate(drawing.price);
+    if (y === null) return null;
+    const yn = y as number;
+    // Approximate label width so we can put a background pill on the right edge
+    const priceText = drawing.price.toFixed(4);
+    return (
+      <g>
+        {/* visible line spanning the chart width */}
+        <line x1={0} y1={yn} x2="100%" y2={yn}
+              stroke={stroke} strokeWidth={sw} strokeDasharray={dash}
+              pointerEvents="none" />
+        {/* fat invisible hit area */}
+        {allowClick && (
+          <line x1={0} y1={yn} x2="100%" y2={yn} stroke="transparent" strokeWidth={HIT_DISTANCE * 2}
+                pointerEvents="stroke"
+                onClick={(e) => { e.stopPropagation(); onClick(); }}
+                style={{ cursor: "pointer" }} />
+        )}
+        {/* price label on the right side of the chart */}
+        <g pointerEvents="none">
+          <rect x="calc(100% - 60px)" y={yn - 8} width={56} height={16}
+                fill={stroke} opacity={selected ? 1 : 0.85} rx={2} />
+          <text x="calc(100% - 32px)" y={yn + 3} fill="white" fontSize={10}
+                fontFamily="monospace" textAnchor="middle" fontWeight={600}>
+            {priceText}
+          </text>
+        </g>
+      </g>
+    );
   }
 
   if (drawing.kind === "trendline") {
