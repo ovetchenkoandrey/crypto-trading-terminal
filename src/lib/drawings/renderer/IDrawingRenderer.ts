@@ -3,8 +3,8 @@ import type { Drawing, DrawingPoint } from "../types";
 
 export interface DrawingRendererContext {
   chart: IChartApi;
-  // The candlestick series — used to translate price ↔ pixel coordinates.
-  series: ISeriesApi<"Candlestick">;
+  // The main price series — used to translate price ↔ pixel coordinates. May be candle / line / area.
+  series: ISeriesApi<"Candlestick" | "Line" | "Area">;
 }
 
 export interface DrawingRendererCallbacks {

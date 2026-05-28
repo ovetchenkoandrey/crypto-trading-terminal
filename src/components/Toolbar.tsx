@@ -28,6 +28,9 @@ export function Toolbar() {
   const setTheme     = useStore((s) => s.setTheme);
   const currentTool    = useStore((s) => s.currentTool);
   const setCurrentTool = useStore((s) => s.setCurrentTool);
+  const activeIndex    = useStore((s) => s.activeCellIndex);
+  const activeChartType = useStore((s) => s.mosaicCells[s.activeCellIndex]?.chartType ?? s.settings.chart.defaultChartType);
+  const setMosaicCell  = useStore((s) => s.setMosaicCell);
   const [showSettings, setShowSettings] = useState(false);
 
   const LAYOUTS: { key: LayoutKey; label: string }[] = [
@@ -41,8 +44,15 @@ export function Toolbar() {
       <button className="icon-btn" title="Новый график">📊</button>
       <button className="icon-btn" title="Сохранить">💾</button>
       <span className="sep" />
-      <button className="icon-btn active" title="Свечи">🕯</button>
-      <button className="icon-btn" title="Линия">📈</button>
+      <button className={"icon-btn" + (activeChartType === "candle" ? " active" : "")}
+              title="Свечи (для активной ячейки)"
+              onClick={() => setMosaicCell(activeIndex, { chartType: "candle" })}>🕯</button>
+      <button className={"icon-btn" + (activeChartType === "line" ? " active" : "")}
+              title="Линия (для активной ячейки)"
+              onClick={() => setMosaicCell(activeIndex, { chartType: "line" })}>📈</button>
+      <button className={"icon-btn" + (activeChartType === "area" ? " active" : "")}
+              title="Область (для активной ячейки)"
+              onClick={() => setMosaicCell(activeIndex, { chartType: "area" })}>▰</button>
       <span className="sep" />
 
       {TIMEFRAMES.map((tf) => (

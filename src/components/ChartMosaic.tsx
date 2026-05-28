@@ -29,6 +29,7 @@ export function ChartMosaic() {
   const addDrawing         = useStore((s) => s.addDrawing);
   const removeDrawing      = useStore((s) => s.removeDrawing);
   const updateDrawing      = useStore((s) => s.updateDrawing);
+  const settings           = useStore((s) => s.settings);
 
   const [pickerCell, setPickerCell] = useState<number | null>(null);
 
@@ -73,10 +74,11 @@ export function ChartMosaic() {
           const ch  = ticker?.change24h ?? 0;
           const dir = ch >= 0 ? "up" : "dn";
           const isActive = i === activeCell;
+          const chartType = cell.chartType ?? settings.chart.defaultChartType;
 
           return (
             <div
-              key={`${i}-${key}`}
+              key={`${i}-${key}-${chartType}`}
               className={"chart-cell" + (isActive ? " active" : "")}
               onClick={() => setActiveCellIndex(i)}
             >
@@ -109,6 +111,7 @@ export function ChartMosaic() {
                   data={data}
                   symbol={cell.symbol}
                   timeframe={tfLabel(cell.timeframe)}
+                  chartType={chartType}
                   indicators={cell.indicators}
                   onAddIndicator={(kind) => {
                     const def = getIndicatorDef(kind);

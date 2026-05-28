@@ -10,7 +10,7 @@ import type { Candle } from "../lib/types";
 
 interface Props {
   chart: IChartApi;
-  series: ISeriesApi<"Candlestick">;
+  series: ISeriesApi<"Candlestick" | "Line" | "Area">;
   candles: Candle[];           // for snap to OHLC
   drawings: Drawing[];
   activeTool: DrawingTool;
@@ -49,7 +49,7 @@ function findCandleIndex(candles: Candle[], time: number): number {
 function snapPoint(
   point: DrawingPoint,
   candles: Candle[],
-  series: ISeriesApi<"Candlestick">,
+  series: ISeriesApi<"Candlestick" | "Line" | "Area">,
 ): DrawingPoint {
   if (candles.length === 0) return point;
   const idx = findCandleIndex(candles, point.time);
@@ -350,7 +350,7 @@ function buildPreview(tool: DrawingTool, p1: DrawingPoint, p2: DrawingPoint, col
 // ─── individual shape renderer with handles ──────────────────
 
 interface ShapeProps {
-  ctx: { chart: IChartApi; series: ISeriesApi<"Candlestick"> };
+  ctx: { chart: IChartApi; series: ISeriesApi<"Candlestick" | "Line" | "Area"> };
   drawing: Drawing;
   selected: boolean;
   allowClick: boolean;

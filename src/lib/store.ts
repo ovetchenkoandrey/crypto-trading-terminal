@@ -19,6 +19,7 @@ export interface MosaicCell {
   timeframe: string;
   indicators: ActiveIndicator[];
   drawings: Drawing[];
+  chartType?: import("./settings").ChartType;   // candle | line | area (optional → defaults to settings.chart.defaultChartType)
 }
 
 export interface ActiveIndicator {

@@ -4,6 +4,7 @@ import {
   CandlestickSeries,
   HistogramSeries,
   LineSeries,
+  AreaSeries,
   CrosshairMode,
   type IChartApi,
   type ISeriesApi,
@@ -11,6 +12,7 @@ import {
 } from "lightweight-charts";
 import type { Candle } from "../lib/types";
 import type { ActiveIndicator, Drawing } from "../lib/store";
+import type { ChartType } from "../lib/settings";
 import type { DrawingTool } from "../lib/drawings/types";
 import { getIndicatorDef } from "../lib/indicators/registry";
 import { IndicatorParamsDialog } from "./IndicatorParamsDialog";
@@ -21,6 +23,7 @@ interface ChartPaneProps {
   data: Candle[];
   symbol?: string;
   timeframe?: string;
+  chartType?: ChartType;
   indicators?: ActiveIndicator[];
   onAddIndicator?: (kind: string) => void;
   onRemoveIndicator?: (id: string) => void;
@@ -72,14 +75,15 @@ interface IndSeriesSet {
 }
 
 export function ChartPane({
-  data, symbol, timeframe, indicators = [], onAddIndicator, onRemoveIndicator, onUpdateIndicator,
+  data, symbol, timeframe, chartType = "candle",
+  indicators = [], onAddIndicator, onRemoveIndicator, onUpdateIndicator,
   drawings = [], activeTool = "cursor", onAddDrawing, onRemoveDrawing, onUpdateDrawing, onToolDone,
 }: ChartPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const paneContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const paneChartRef = useRef<IChartApi | null>(null);
-  const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const candleSeriesRef = useRef<ISeriesApi<"Candlestick" | "Line" | "Area"> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const lastTimeRef = useRef<number>(0);
   const lastLenRef = useRef<number>(0);
@@ -156,14 +160,34 @@ export function ChartPane({
       kineticScroll: { mouse: false, touch: true },
     });
 
-    const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: green,
-      downColor: red,
-      borderUpColor: green,
-      borderDownColor: red,
-      wickUpColor: green,
-      wickDownColor: red,
-    });
+    // Main price series — picks the lightweight-charts series type by chartType prop.
+    let candleSeries: ISeriesApi<"Candlestick" | "Line" | "Area">;
+    if (chartType === "line") {
+      candleSeries = chart.addSeries(LineSeries, {
+        color: green,
+        lineWidth: 2,
+        priceLineVisible: true,
+        lastValueVisible: true,
+      }) as unknown as ISeriesApi<"Candlestick" | "Line" | "Area">;
+    } else if (chartType === "area") {
+      candleSeries = chart.addSeries(AreaSeries, {
+        lineColor: green,
+        topColor: green + "55",      // ~33% alpha at top
+        bottomColor: green + "08",   // fade to almost transparent
+        lineWidth: 2,
+        priceLineVisible: true,
+        lastValueVisible: true,
+      }) as unknown as ISeriesApi<"Candlestick" | "Line" | "Area">;
+    } else {
+      candleSeries = chart.addSeries(CandlestickSeries, {
+        upColor: green,
+        downColor: red,
+        borderUpColor: green,
+        borderDownColor: red,
+        wickUpColor: green,
+        wickDownColor: red,
+      }) as unknown as ISeriesApi<"Candlestick" | "Line" | "Area">;
+    }
 
     const volumeSeries = chart.addSeries(HistogramSeries, {
       priceScaleId: "vol",
@@ -325,10 +349,14 @@ export function ChartPane({
     const last = data[data.length - 1];
     const greenColor = cssVar("--green");
     const redColor = cssVar("--red");
-    const toCandle = (c: Candle) => ({
-      time: c.time as UTCTimestamp,
-      open: c.open, high: c.high, low: c.low, close: c.close,
-    });
+
+    // Format depends on the series type: candlesticks use OHLC, line/area use {time, value}.
+    const toMain = (c: Candle): { time: UTCTimestamp; value: number } | { time: UTCTimestamp; open: number; high: number; low: number; close: number } => {
+      if (chartType === "line" || chartType === "area") {
+        return { time: c.time as UTCTimestamp, value: c.close };
+      }
+      return { time: c.time as UTCTimestamp, open: c.open, high: c.high, low: c.low, close: c.close };
+    };
     const toVol = (c: Candle) => ({
       time: c.time as UTCTimestamp,
       value: c.volume,
@@ -343,7 +371,8 @@ export function ChartPane({
     const firstFullLoad = bigJump && data.length > 50 && prevLen < 50;
 
     if (isInitial || bigJump) {
-      candleSeries.setData(data.map(toCandle));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      candleSeries.setData(data.map(toMain) as any);
       volumeSeries.setData(data.map(toVol));
       // Defer one frame so the chart definitely knows its post-layout size.
       if (isInitial || firstFullLoad) {
@@ -362,7 +391,8 @@ export function ChartPane({
         });
       }
     } else {
-      candleSeries.update(toCandle(last));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      candleSeries.update(toMain(last) as any);
       volumeSeries.update(toVol(last));
     }
 
