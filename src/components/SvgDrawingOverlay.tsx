@@ -137,6 +137,18 @@ export function SvgDrawingOverlay({
     };
   }, [chart]);
 
+  // Click on empty chart area (candles / background) deselects the current drawing.
+  // Drawings have `pointer-events: stroke` so clicks on them DON'T bubble to the chart canvas —
+  // which means subscribeClick fires only when the click missed every drawing.
+  useEffect(() => {
+    if (!selectedId) return;
+    const handler = () => {
+      if (stateRef.current.mode === "idle") onSelect(null);
+    };
+    chart.subscribeClick(handler);
+    return () => { try { chart.unsubscribeClick(handler); } catch { /* noop */ } };
+  }, [chart, selectedId, onSelect]);
+
   // Delete-key on selected drawing; Escape cancels create/drag/select
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
