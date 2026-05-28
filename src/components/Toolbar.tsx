@@ -1,11 +1,18 @@
 import { useStore } from "../lib/store";
-import type { PanelKey, LayoutKey } from "../lib/store";
+import type { PanelKey, LayoutKey, DrawingTool } from "../lib/store";
 import { TIMEFRAMES } from "../lib/symbols";
 
 const PANEL_BTNS: { key: PanelKey; icon: string; title: string }[] = [
   { key: "orderBook", icon: "📊", title: "Стакан / DOM (Ctrl+D)" },
   { key: "navigator", icon: "🤖", title: "Навигатор (Ctrl+N)" },
   { key: "terminal",  icon: "📋", title: "Терминал (Ctrl+T)" },
+];
+
+const TOOL_BTNS: { tool: DrawingTool; icon: string; title: string }[] = [
+  { tool: "trendline", icon: "📐", title: "Линия тренда (клик-клик)" },
+  { tool: "hline",     icon: "─", title: "Горизонтальная линия" },
+  { tool: "fib",       icon: "𝝓", title: "Фибоначчи (клик-клик)" },
+  { tool: "text",      icon: "T", title: "Текст" },
 ];
 
 export function Toolbar() {
@@ -17,6 +24,8 @@ export function Toolbar() {
   const setLayout    = useStore((s) => s.setLayout);
   const theme        = useStore((s) => s.theme);
   const setTheme     = useStore((s) => s.setTheme);
+  const currentTool    = useStore((s) => s.currentTool);
+  const setCurrentTool = useStore((s) => s.setCurrentTool);
 
   const LAYOUTS: { key: LayoutKey; label: string }[] = [
     { key: "1", label: "1×1" },
@@ -44,11 +53,27 @@ export function Toolbar() {
       ))}
 
       <span className="sep" />
-      <button className="icon-btn" title="Индикатор">𝑓</button>
-      <button className="icon-btn" title="Линия тренда">📐</button>
-      <button className="icon-btn" title="Горизонтальная линия">─</button>
-      <button className="icon-btn" title="Фибоначчи">𝝓</button>
-      <button className="icon-btn" title="Текст">T</button>
+      <button
+        className="icon-btn"
+        title="Прокрутить к текущему моменту"
+        onClick={() => window.dispatchEvent(new CustomEvent("trading-app:scroll-to-realtime"))}
+      >⏵</button>
+      <span className="sep" />
+      <button
+        className={"icon-btn" + (currentTool === "cursor" ? " active" : "")}
+        title="Курсор / выбор (Esc)"
+        onClick={() => setCurrentTool("cursor")}
+      >✛</button>
+      {TOOL_BTNS.map((t) => (
+        <button
+          key={t.tool}
+          className={"icon-btn" + (currentTool === t.tool ? " active" : "")}
+          title={t.title}
+          onClick={() => setCurrentTool(currentTool === t.tool ? "cursor" : t.tool)}
+        >
+          {t.icon}
+        </button>
+      ))}
 
       <span className="spacer" />
 

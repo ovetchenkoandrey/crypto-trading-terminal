@@ -3,6 +3,8 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import type { Candle } from "./types";
 import type { SymbolMeta } from "./symbols";
 import { DEFAULT_SYMBOLS } from "./symbols";
+import type { Drawing, DrawingTool } from "./drawings/types";
+export type { Drawing, DrawingTool } from "./drawings/types";
 
 export type PanelKey = "marketWatch" | "orderBook" | "navigator" | "terminal";
 export type PanelsState = Record<PanelKey, boolean>;
@@ -13,6 +15,7 @@ export interface MosaicCell {
   symbol: string;
   timeframe: string;
   indicators: ActiveIndicator[];
+  drawings: Drawing[];
 }
 
 export interface ActiveIndicator {
@@ -117,6 +120,7 @@ interface PersistedSlice {
   layout: LayoutKey;
   mosaicCells: MosaicCell[];
   watchlist: string[];
+  currentTool: DrawingTool;        // active drawing tool (top-level; affects whichever cell user clicks in)
   paperBalance: number;
   paperPositions: PaperPosition[];
   paperOrders: PaperOrder[];
@@ -144,6 +148,12 @@ interface Actions {
   addIndicator: (cellIndex: number, ind: ActiveIndicator) => void;
   removeIndicator: (cellIndex: number, id: string) => void;
   updateIndicator: (cellIndex: number, id: string, partial: Partial<ActiveIndicator>) => void;
+
+  setCurrentTool: (t: DrawingTool) => void;
+  addDrawing: (cellIndex: number, d: Drawing) => void;
+  removeDrawing: (cellIndex: number, id: string) => void;
+  updateDrawing: (cellIndex: number, id: string, partial: Partial<Drawing>) => void;
+  clearDrawings: (cellIndex: number) => void;
 
   updateTicker: (t: Ticker) => void;
   setOrderbook: (ob: Orderbook | null) => void;
@@ -179,11 +189,12 @@ const DEFAULT_PERSISTED: PersistedSlice = {
   activeCellIndex: 0,
   layout: "1",
   mosaicCells: [
-    { symbol: "BTCUSDT",  timeframe: "15", indicators: [] },
-    { symbol: "ETHUSDT",  timeframe: "15", indicators: [] },
-    { symbol: "SOLUSDT",  timeframe: "15", indicators: [] },
-    { symbol: "DOGEUSDT", timeframe: "15", indicators: [] },
+    { symbol: "BTCUSDT",  timeframe: "15", indicators: [], drawings: [] },
+    { symbol: "ETHUSDT",  timeframe: "15", indicators: [], drawings: [] },
+    { symbol: "SOLUSDT",  timeframe: "15", indicators: [], drawings: [] },
+    { symbol: "DOGEUSDT", timeframe: "15", indicators: [], drawings: [] },
   ],
+  currentTool: "cursor",
   watchlist: ["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT","DOGEUSDT","ADAUSDT","AVAXUSDT","DOTUSDT","LINKUSDT","MATICUSDT","ATOMUSDT"],
   paperBalance: 10000,
   paperPositions: [],
@@ -272,6 +283,39 @@ export const useStore = create<Store>()(
         return { mosaicCells: cells };
       }),
 
+      setCurrentTool: (t) => set({ currentTool: t }),
+      addDrawing: (cellIndex, d) => set((s) => {
+        const cells = [...s.mosaicCells];
+        const cell = cells[cellIndex];
+        if (!cell) return s;
+        cells[cellIndex] = { ...cell, drawings: [...(cell.drawings ?? []), d] };
+        return { mosaicCells: cells };
+      }),
+      removeDrawing: (cellIndex, id) => set((s) => {
+        const cells = [...s.mosaicCells];
+        const cell = cells[cellIndex];
+        if (!cell) return s;
+        cells[cellIndex] = { ...cell, drawings: (cell.drawings ?? []).filter((d) => d.id !== id) };
+        return { mosaicCells: cells };
+      }),
+      updateDrawing: (cellIndex, id, partial) => set((s) => {
+        const cells = [...s.mosaicCells];
+        const cell = cells[cellIndex];
+        if (!cell) return s;
+        cells[cellIndex] = {
+          ...cell,
+          drawings: (cell.drawings ?? []).map((d) => (d.id === id ? ({ ...d, ...partial } as Drawing) : d)),
+        };
+        return { mosaicCells: cells };
+      }),
+      clearDrawings: (cellIndex) => set((s) => {
+        const cells = [...s.mosaicCells];
+        const cell = cells[cellIndex];
+        if (!cell) return s;
+        cells[cellIndex] = { ...cell, drawings: [] };
+        return { mosaicCells: cells };
+      }),
+
       updateTicker: (t) => set((s) => ({ tickers: { ...s.tickers, [t.symbol]: t } })),
       setOrderbook: (ob) => set({ orderbook: ob }),
       applyOrderbookDelta: (symbol, askUpdates, bidUpdates, ts) => set((s) => {
@@ -350,6 +394,7 @@ export const useStore = create<Store>()(
         timeframe: state.timeframe,
         activeCellIndex: state.activeCellIndex,
         layout: state.layout,
+        currentTool: state.currentTool,
         mosaicCells: state.mosaicCells,
         watchlist: state.watchlist,
         paperBalance: state.paperBalance,

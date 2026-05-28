@@ -24,6 +24,10 @@ export function ChartMosaic() {
   const updateIndicator    = useStore((s) => s.updateIndicator);
   const activeCell         = useStore((s) => s.activeCellIndex);
   const setActiveCellIndex = useStore((s) => s.setActiveCellIndex);
+  const currentTool        = useStore((s) => s.currentTool);
+  const setCurrentTool     = useStore((s) => s.setCurrentTool);
+  const addDrawing         = useStore((s) => s.addDrawing);
+  const removeDrawing      = useStore((s) => s.removeDrawing);
 
   const [pickerCell, setPickerCell] = useState<number | null>(null);
 
@@ -117,6 +121,11 @@ export function ChartMosaic() {
                   }}
                   onRemoveIndicator={(id) => removeIndicator(i, id)}
                   onUpdateIndicator={(id, partial) => updateIndicator(i, id, partial)}
+                  drawings={cell.drawings ?? []}
+                  activeTool={isActive ? currentTool : "cursor"}
+                  onAddDrawing={(d) => addDrawing(i, d)}
+                  onRemoveDrawing={(id) => removeDrawing(i, id)}
+                  onToolDone={() => setCurrentTool("cursor")}
                 />
               </div>
             </div>

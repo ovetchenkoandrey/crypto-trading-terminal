@@ -10,9 +10,11 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import type { Candle } from "../lib/types";
-import type { ActiveIndicator } from "../lib/store";
+import type { ActiveIndicator, Drawing } from "../lib/store";
+import type { DrawingTool } from "../lib/drawings/types";
 import { getIndicatorDef } from "../lib/indicators/registry";
 import { IndicatorParamsDialog } from "./IndicatorParamsDialog";
+import { SvgDrawingOverlay } from "./SvgDrawingOverlay";
 
 interface ChartPaneProps {
   data: Candle[];
@@ -22,6 +24,12 @@ interface ChartPaneProps {
   onAddIndicator?: (kind: string) => void;
   onRemoveIndicator?: (id: string) => void;
   onUpdateIndicator?: (id: string, partial: Partial<ActiveIndicator>) => void;
+
+  drawings?: Drawing[];
+  activeTool?: DrawingTool;
+  onAddDrawing?: (d: Drawing) => void;
+  onRemoveDrawing?: (id: string) => void;
+  onToolDone?: () => void;
 }
 
 function indicatorLabel(ind: ActiveIndicator): string {
@@ -61,7 +69,10 @@ interface IndSeriesSet {
   isPaneChart: boolean;
 }
 
-export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndicator, onRemoveIndicator, onUpdateIndicator }: ChartPaneProps) {
+export function ChartPane({
+  data, symbol, timeframe, indicators = [], onAddIndicator, onRemoveIndicator, onUpdateIndicator,
+  drawings = [], activeTool = "cursor", onAddDrawing, onRemoveDrawing, onToolDone,
+}: ChartPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const paneContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -73,6 +84,8 @@ export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndic
   const indSeriesRef = useRef<IndSeriesSet[]>([]);
   const [ohlc, setOhlc] = useState<OhlcDisplay | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [selectedDrawing, setSelectedDrawing] = useState<string | null>(null);
+  const [chartReady, setChartReady] = useState(0);   // bumped after series exist to mount overlay
 
   // Track whether we need the pane chart
   const hasPaneIndicators = indicators.some((ind) => {
@@ -158,6 +171,11 @@ export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndic
     chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
     volumeSeriesRef.current = volumeSeries;
+    setChartReady((n) => n + 1);   // overlay can mount now that chart+series exist
+
+    // Toolbar's ⏵ button asks every chart to scroll to the latest bar
+    const onScrollToRealtime = () => chartRef.current?.timeScale().scrollToRealTime();
+    window.addEventListener("trading-app:scroll-to-realtime", onScrollToRealtime);
 
     const ro = new ResizeObserver((entries) => {
       const entry = entries[0];
@@ -182,6 +200,7 @@ export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndic
     });
 
     return () => {
+      window.removeEventListener("trading-app:scroll-to-realtime", onScrollToRealtime);
       ro.disconnect();
       // cleanup all indicator series before removing chart
       indSeriesRef.current = [];
@@ -467,10 +486,25 @@ export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndic
       onDrop={handleDrop}
     >
       <div
-        ref={containerRef}
-        className="chart-host-inner"
-        style={{ flex: hasPaneIndicators ? "1 1 65%" : "1 1 100%", minHeight: 0, display: isEmpty ? "none" : "block" }}
-      />
+        className="chart-host-inner-wrap"
+        style={{ position: "relative", flex: hasPaneIndicators ? "1 1 65%" : "1 1 100%", minHeight: 0, display: isEmpty ? "none" : "block" }}
+      >
+        <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
+        {chartReady > 0 && chartRef.current && candleSeriesRef.current && (
+          <SvgDrawingOverlay
+            chart={chartRef.current}
+            series={candleSeriesRef.current}
+            drawings={drawings}
+            activeTool={activeTool}
+            selectedId={selectedDrawing}
+            defaultColor={cssVar("--accent") || "#f0b90b"}
+            onCreate={(d) => onAddDrawing?.(d)}
+            onSelect={(id) => setSelectedDrawing(id)}
+            onDelete={(id) => onRemoveDrawing?.(id)}
+            onToolDone={() => onToolDone?.()}
+          />
+        )}
+      </div>
       {hasPaneIndicators && (
         <div
           ref={paneContainerRef}
