@@ -316,13 +316,15 @@ export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndic
     const prevLen = lastLenRef.current;
     const isInitial = prevLen === 0;
     const bigJump = data.length > prevLen + 1 || data.length < prevLen;
+    // Covers the case where WS ticks 1-2 candles in before REST arrives with 200 —
+    // we still want to fit content on that first big drop, not just on the very first paint.
+    const firstFullLoad = bigJump && data.length > 50 && prevLen < 50;
 
     if (isInitial || bigJump) {
       candleSeries.setData(data.map(toCandle));
       volumeSeries.setData(data.map(toVol));
-      // Only fit content on first load — preserves user's scroll/zoom afterwards.
       // Defer one frame so the chart definitely knows its post-layout size.
-      if (isInitial) {
+      if (isInitial || firstFullLoad) {
         requestAnimationFrame(() => {
           chartRef.current?.timeScale().fitContent();
         });
