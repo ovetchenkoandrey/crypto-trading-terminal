@@ -103,21 +103,20 @@ export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndic
         // Floor on bar width so we can't get stuck with hair-thin bars
         minBarSpacing: 2,
       },
-      // Disable drag-resize on axes (was making bars stretch/squeeze unexpectedly when user dragged)
+      // Mouse drag does NOTHING. Scroll only with mouse-wheel. Zoom only with Ctrl+wheel.
       handleScale: {
         axisPressedMouseMove: { time: false, price: false },
         axisDoubleClickReset: false,
-        mouseWheel: true,
-        pinch: true,
+        mouseWheel: false,
+        pinch: false,
       },
       handleScroll: {
-        mouseWheel: true,
-        pressedMouseMove: true,
-        horzTouchDrag: true,
+        mouseWheel: true,           // wheel = scroll along time axis
+        pressedMouseMove: false,    // dragging the chart body does nothing
+        horzTouchDrag: false,
         vertTouchDrag: false,
       },
-      // No kinetic flick on mouse — it kept zooming after release
-      kineticScroll: { mouse: false, touch: true },
+      kineticScroll: { mouse: false, touch: false },
     });
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
@@ -224,16 +223,16 @@ export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndic
       handleScale: {
         axisPressedMouseMove: { time: false, price: false },
         axisDoubleClickReset: false,
-        mouseWheel: true,
-        pinch: true,
+        mouseWheel: false,
+        pinch: false,
       },
       handleScroll: {
         mouseWheel: true,
-        pressedMouseMove: true,
-        horzTouchDrag: true,
+        pressedMouseMove: false,
+        horzTouchDrag: false,
         vertTouchDrag: false,
       },
-      kineticScroll: { mouse: false, touch: true },
+      kineticScroll: { mouse: false, touch: false },
     });
 
     paneChartRef.current = paneChart;
