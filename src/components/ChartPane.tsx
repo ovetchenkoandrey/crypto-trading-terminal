@@ -15,6 +15,7 @@ import type { DrawingTool } from "../lib/drawings/types";
 import { getIndicatorDef } from "../lib/indicators/registry";
 import { IndicatorParamsDialog } from "./IndicatorParamsDialog";
 import { SvgDrawingOverlay } from "./SvgDrawingOverlay";
+import { DrawingParamsDialog } from "./DrawingParamsDialog";
 
 interface ChartPaneProps {
   data: Candle[];
@@ -29,6 +30,7 @@ interface ChartPaneProps {
   activeTool?: DrawingTool;
   onAddDrawing?: (d: Drawing) => void;
   onRemoveDrawing?: (id: string) => void;
+  onUpdateDrawing?: (id: string, partial: Partial<Drawing>) => void;
   onToolDone?: () => void;
 }
 
@@ -71,7 +73,7 @@ interface IndSeriesSet {
 
 export function ChartPane({
   data, symbol, timeframe, indicators = [], onAddIndicator, onRemoveIndicator, onUpdateIndicator,
-  drawings = [], activeTool = "cursor", onAddDrawing, onRemoveDrawing, onToolDone,
+  drawings = [], activeTool = "cursor", onAddDrawing, onRemoveDrawing, onUpdateDrawing, onToolDone,
 }: ChartPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const paneContainerRef = useRef<HTMLDivElement>(null);
@@ -85,6 +87,7 @@ export function ChartPane({
   const [ohlc, setOhlc] = useState<OhlcDisplay | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedDrawing, setSelectedDrawing] = useState<string | null>(null);
+  const [editingDrawing, setEditingDrawing] = useState<string | null>(null);
   const [chartReady, setChartReady] = useState(0);   // bumped after series exist to mount overlay
 
   // Track whether we need the pane chart
@@ -494,13 +497,16 @@ export function ChartPane({
           <SvgDrawingOverlay
             chart={chartRef.current}
             series={candleSeriesRef.current}
+            candles={data}
             drawings={drawings}
             activeTool={activeTool}
             selectedId={selectedDrawing}
             defaultColor={cssVar("--accent") || "#f0b90b"}
             onCreate={(d) => onAddDrawing?.(d)}
             onSelect={(id) => setSelectedDrawing(id)}
+            onUpdate={(id, partial) => onUpdateDrawing?.(id, partial)}
             onDelete={(id) => onRemoveDrawing?.(id)}
+            onEdit={(id) => setEditingDrawing(id)}
             onToolDone={() => onToolDone?.()}
           />
         )}
@@ -575,6 +581,18 @@ export function ChartPane({
             indicator={ind}
             onSave={(partial) => onUpdateIndicator(ind.id, partial)}
             onClose={() => setEditingId(null)}
+          />
+        );
+      })()}
+      {editingDrawing && onUpdateDrawing && (() => {
+        const d = drawings.find((x) => x.id === editingDrawing);
+        if (!d) return null;
+        return (
+          <DrawingParamsDialog
+            drawing={d}
+            onSave={(partial) => onUpdateDrawing(d.id, partial)}
+            onClose={() => setEditingDrawing(null)}
+            onDelete={onRemoveDrawing ? () => onRemoveDrawing(d.id) : undefined}
           />
         );
       })()}

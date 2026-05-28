@@ -1,32 +1,125 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
-import type { Drawing, DrawingPoint, DrawingTool, HLineDrawing, TrendLineDrawing, FibDrawing, TextDrawing } from "../lib/drawings/types";
+import type {
+  Drawing, DrawingPoint, DrawingTool,
+  HLineDrawing, TrendLineDrawing, FibDrawing, TextDrawing,
+} from "../lib/drawings/types";
 import { DEFAULT_FIB_LEVELS, newId } from "../lib/drawings/types";
 import { chartToPixel, pixelToChart } from "../lib/drawings/renderer/IDrawingRenderer";
+import type { Candle } from "../lib/types";
 
 interface Props {
   chart: IChartApi;
   series: ISeriesApi<"Candlestick">;
+  candles: Candle[];           // for snap to OHLC
   drawings: Drawing[];
   activeTool: DrawingTool;
   selectedId: string | null;
   defaultColor: string;
-  onCreate:  (d: Drawing) => void;
-  onSelect:  (id: string | null) => void;
-  onDelete?: (id: string) => void;
-  onToolDone?: () => void;     // call after a drawing is created → switch back to cursor
+  onCreate:    (d: Drawing) => void;
+  onSelect:    (id: string | null) => void;
+  onUpdate?:   (id: string, partial: Partial<Drawing>) => void;
+  onDelete?:   (id: string) => void;
+  onToolDone?: () => void;
+  onEdit?:     (id: string) => void;    // opens params dialog
 }
 
-const HIT_DISTANCE = 6;        // px — how close to a line counts as a hit
+const HIT_DISTANCE = 6;
+const OHLC_SNAP_PIXELS = 10;     // if cursor within this many px of an O/H/L/C — snap
+
+// ─── helpers ─────────────────────────────────────────────────
+
+/** Find the index of the candle whose time is closest to the given time. */
+function findCandleIndex(candles: Candle[], time: number): number {
+  if (candles.length === 0) return -1;
+  // binary search since candles are time-ascending
+  let lo = 0, hi = candles.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (candles[mid].time < time) lo = mid + 1; else hi = mid;
+  }
+  if (lo > 0 && Math.abs(candles[lo - 1].time - time) < Math.abs(candles[lo].time - time)) return lo - 1;
+  return lo;
+}
+
+/**
+ * Snap a raw chart point to the nearest bar + nearest O/H/L/C if within threshold.
+ * Pixel-distance check is done via priceToCoordinate so threshold stays consistent across zoom levels.
+ */
+function snapPoint(
+  point: DrawingPoint,
+  candles: Candle[],
+  series: ISeriesApi<"Candlestick">,
+): DrawingPoint {
+  if (candles.length === 0) return point;
+  const idx = findCandleIndex(candles, point.time);
+  if (idx < 0) return point;
+  const candle = candles[idx];
+
+  // Compare cursor y to each OHLC y; pick closest if within threshold
+  const cursorY = series.priceToCoordinate(point.price);
+  if (cursorY === null) {
+    return { time: candle.time, price: point.price };
+  }
+  let bestPrice = point.price;
+  let bestDist = Infinity;
+  for (const ohlc of [candle.open, candle.high, candle.low, candle.close]) {
+    const y = series.priceToCoordinate(ohlc);
+    if (y === null) continue;
+    const d = Math.abs((y as number) - (cursorY as number));
+    if (d < bestDist) { bestDist = d; bestPrice = ohlc; }
+  }
+  return {
+    time: candle.time,
+    price: bestDist <= OHLC_SNAP_PIXELS ? bestPrice : point.price,
+  };
+}
+
+// ─── state machine ───────────────────────────────────────────
+
+type OverlayState =
+  | { mode: "idle" }
+  | { mode: "creating"; tool: DrawingTool; p1: DrawingPoint; current: DrawingPoint }
+  | { mode: "dragging"; id: string; handle: "p1" | "p2" | "middle" | "single"; snap: boolean; startPoint: DrawingPoint; original: Drawing };
+
+type OverlayAction =
+  | { type: "start-create"; tool: DrawingTool; point: DrawingPoint }
+  | { type: "move-create";  point: DrawingPoint }
+  | { type: "finish-create" }
+  | { type: "start-drag"; id: string; handle: "p1" | "p2" | "middle" | "single"; startPoint: DrawingPoint; original: Drawing }
+  | { type: "move-drag";  point: DrawingPoint }
+  | { type: "finish-drag" }
+  | { type: "cancel" };
+
+function reduce(state: OverlayState, action: OverlayAction): OverlayState {
+  switch (action.type) {
+    case "start-create":
+      return { mode: "creating", tool: action.tool, p1: action.point, current: action.point };
+    case "move-create":
+      if (state.mode !== "creating") return state;
+      return { ...state, current: action.point };
+    case "finish-create":
+    case "finish-drag":
+    case "cancel":
+      return { mode: "idle" };
+    case "start-drag":
+      return { mode: "dragging", id: action.id, handle: action.handle, snap: true, startPoint: action.startPoint, original: action.original };
+    case "move-drag":
+      return state;        // pure event — actual update is dispatched as onUpdate
+  }
+}
+
+// ─── component ───────────────────────────────────────────────
 
 export function SvgDrawingOverlay({
-  chart, series, drawings, activeTool, selectedId, defaultColor,
-  onCreate, onSelect, onDelete, onToolDone,
+  chart, series, candles, drawings, activeTool, selectedId, defaultColor,
+  onCreate, onSelect, onUpdate, onDelete, onToolDone, onEdit,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [, force] = useReducer((x: number) => x + 1, 0);
-  const [draftPoint, setDraftPoint] = useState<DrawingPoint | null>(null);
-  const [hoverPoint, setHoverPoint] = useState<DrawingPoint | null>(null);
+  const [state, dispatch] = useReducer(reduce, { mode: "idle" });
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   // Re-render on pan/zoom/resize/crosshair (so SVG positions track the chart)
   useEffect(() => {
@@ -35,7 +128,6 @@ export function SvgDrawingOverlay({
     ts.subscribeVisibleLogicalRangeChange(onRangeChange);
     const ro = new ResizeObserver(() => force());
     if (wrapRef.current) ro.observe(wrapRef.current);
-    // Also re-render on crosshair move so the rubber-band preview is smooth
     const onCh = () => force();
     chart.subscribeCrosshairMove(onCh);
     return () => {
@@ -45,93 +137,155 @@ export function SvgDrawingOverlay({
     };
   }, [chart]);
 
-  // Delete-key on selected drawing
+  // Delete-key on selected drawing; Escape cancels create/drag/select
   useEffect(() => {
-    if (!selectedId || !onDelete) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Delete" || e.key === "Backspace") {
+      if (e.key === "Escape") {
+        if (stateRef.current.mode !== "idle") dispatch({ type: "cancel" });
+        else if (selectedId) onSelect(null);
+      }
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedId && onDelete) {
         e.preventDefault();
         onDelete(selectedId);
         onSelect(null);
       }
-      if (e.key === "Escape") onSelect(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [selectedId, onDelete, onSelect]);
 
-  const ctx = { chart, series };
-
-  // ─── pointer handlers ───
-  const getPoint = (e: React.PointerEvent | React.MouseEvent): DrawingPoint | null => {
+  // Helper: convert a browser event into a snapped chart point
+  const getPoint = (clientX: number, clientY: number, snap = true): DrawingPoint | null => {
     const rect = wrapRef.current?.getBoundingClientRect();
     if (!rect) return null;
-    return pixelToChart(ctx, rect, e.clientX, e.clientY);
+    const p = pixelToChart({ chart, series }, rect, clientX, clientY);
+    if (!p) return null;
+    return snap ? snapPoint(p, candles, series) : p;
   };
 
-  const onPointerDown = (e: React.PointerEvent) => {
-    const p = getPoint(e);
-    if (!p) return;
+  // Window-level pointer move/up listeners during create or drag, so the user can
+  // move the cursor anywhere on the page and we still receive events.
+  useEffect(() => {
+    if (state.mode === "idle") return;
 
-    if (activeTool === "cursor") return;   // selection handled by SVG click below
-
-    if (activeTool === "hline") {
-      const d: HLineDrawing = { id: newId(), kind: "hline", price: p.price, color: defaultColor };
-      onCreate(d);
-      onToolDone?.();
-      return;
-    }
-
-    if (activeTool === "trendline" || activeTool === "fib") {
-      if (!draftPoint) {
-        setDraftPoint(p);
-        setHoverPoint(p);
-      } else {
-        const base = { id: newId(), color: defaultColor };
-        const d: Drawing = activeTool === "trendline"
-          ? { ...base, kind: "trendline" as const, p1: draftPoint, p2: p } satisfies TrendLineDrawing
-          : { ...base, kind: "fib"       as const, p1: draftPoint, p2: p, levels: DEFAULT_FIB_LEVELS } satisfies FibDrawing;
-        onCreate(d);
-        setDraftPoint(null);
-        setHoverPoint(null);
-        onToolDone?.();
+    const onMove = (e: PointerEvent) => {
+      const p = getPoint(e.clientX, e.clientY);
+      if (!p) return;
+      const s = stateRef.current;
+      if (s.mode === "creating") {
+        dispatch({ type: "move-create", point: p });
+      } else if (s.mode === "dragging" && onUpdate) {
+        const orig = s.original;
+        if (s.handle === "p1" && "p1" in orig) onUpdate(s.id, { p1: p });
+        else if (s.handle === "p2" && "p2" in orig) onUpdate(s.id, { p2: p });
+        else if (s.handle === "single") {
+          if (orig.kind === "hline") onUpdate(s.id, { price: p.price });
+          else if (orig.kind === "text") onUpdate(s.id, { point: p });
+        } else if (s.handle === "middle") {
+          // shift both endpoints by the delta from startPoint→cursor
+          const dt = p.time - s.startPoint.time;
+          const dp = p.price - s.startPoint.price;
+          if (orig.kind === "trendline" || orig.kind === "fib") {
+            onUpdate(s.id, {
+              p1: { time: orig.p1.time + dt, price: orig.p1.price + dp },
+              p2: { time: orig.p2.time + dt, price: orig.p2.price + dp },
+            });
+          } else if (orig.kind === "hline") {
+            onUpdate(s.id, { price: orig.price + dp });
+          } else if (orig.kind === "text") {
+            onUpdate(s.id, { point: { time: orig.point.time + dt, price: orig.point.price + dp } });
+          }
+        }
       }
-      return;
-    }
+    };
 
-    if (activeTool === "text") {
+    const onUp = (e: PointerEvent) => {
+      const p = getPoint(e.clientX, e.clientY);
+      const s = stateRef.current;
+      if (s.mode === "creating" && p) {
+        finishCreate(s.tool, s.p1, p);
+      }
+      dispatch({ type: "finish-create" });   // also resets dragging
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.mode, onUpdate]);
+
+  // Helper to commit a newly created drawing
+  const finishCreate = (tool: DrawingTool, p1: DrawingPoint, p2: DrawingPoint) => {
+    const base = { id: newId(), color: defaultColor };
+    if (tool === "hline") {
+      const d: HLineDrawing = { ...base, kind: "hline", price: p2.price };
+      onCreate(d);
+    } else if (tool === "trendline") {
+      // If user just clicked without dragging, p1 ≈ p2 — make a sensible default span (1 bar)
+      const d: TrendLineDrawing = { ...base, kind: "trendline", p1, p2 };
+      onCreate(d);
+    } else if (tool === "fib") {
+      const d: FibDrawing = { ...base, kind: "fib", p1, p2, levels: DEFAULT_FIB_LEVELS };
+      onCreate(d);
+    } else if (tool === "text") {
       const text = window.prompt("Текст:");
       if (text && text.trim()) {
-        const d: TextDrawing = { id: newId(), kind: "text", point: p, text: text.trim(), color: defaultColor };
+        const d: TextDrawing = { ...base, kind: "text", point: p2, text: text.trim() };
         onCreate(d);
       }
-      onToolDone?.();
+    }
+    onToolDone?.();
+  };
+
+  // ─── pointer handlers on the overlay (for create + clicks on empty space) ───
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (activeTool === "cursor") {
+      // click on empty space deselects
+      onSelect(null);
       return;
     }
+    const p = getPoint(e.clientX, e.clientY);
+    if (!p) return;
+    e.preventDefault();
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    dispatch({ type: "start-create", tool: activeTool, point: p });
   };
 
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (activeTool === "cursor" || !draftPoint) return;
-    const p = getPoint(e);
-    if (p) setHoverPoint(p);
+  // Pointer events on drawings (clicks/drags on existing handles + bodies)
+  const startHandleDrag = (id: string, handle: "p1" | "p2" | "middle" | "single", e: React.PointerEvent) => {
+    if (activeTool !== "cursor" || !onUpdate) return;
+    e.stopPropagation();
+    e.preventDefault();
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    const start = getPoint(e.clientX, e.clientY, false);
+    if (!start) return;
+    const original = drawings.find((d) => d.id === id);
+    if (!original) return;
+    onSelect(id);
+    dispatch({ type: "start-drag", id, handle, startPoint: start, original });
   };
 
-  // In cursor mode: overlay div is non-interactive, but individual SVG shapes still
-  // catch clicks (they set their own `pointerEvents: stroke`). This way pan/scroll
-  // of the chart keeps working when the cursor tool is active.
-  const interactive = activeTool !== "cursor";
-  const cursorStyle = activeTool === "cursor" ? "default" : "crosshair";
+  const interactive = activeTool !== "cursor" || state.mode !== "idle";
+  const cursorStyle = activeTool === "cursor" ? (state.mode === "dragging" ? "grabbing" : "default") : "crosshair";
+
+  // Preview of the drawing being created
+  const previewDrawing: Drawing | null = state.mode === "creating"
+    ? buildPreview(state.tool, state.p1, state.current, defaultColor)
+    : null;
+
+  const containerWidth = wrapRef.current?.clientWidth ?? 0;
 
   return (
     <div
       ref={wrapRef}
       onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
       style={{
         position: "absolute",
         inset: 0,
         cursor: cursorStyle,
-        // When cursor tool is active and nothing selected — let pointer events fall through to the chart
         pointerEvents: interactive ? "auto" : "none",
         zIndex: 5,
       }}
@@ -140,41 +294,75 @@ export function SvgDrawingOverlay({
         {drawings.map((d) => (
           <DrawingShape
             key={d.id}
-            ctx={ctx}
+            ctx={{ chart, series }}
             drawing={d}
             selected={d.id === selectedId}
-            onClick={() => onSelect(d.id)}
             allowClick={activeTool === "cursor"}
-            containerWidth={wrapRef.current?.clientWidth ?? 0}
+            containerWidth={containerWidth}
+            onClick={() => onSelect(d.id)}
+            onDoubleClick={() => onEdit?.(d.id)}
+            onHandleDown={(handle, e) => startHandleDrag(d.id, handle, e)}
           />
         ))}
-        {draftPoint && hoverPoint && (activeTool === "trendline" || activeTool === "fib") && (
-          <DraftPreview ctx={ctx} tool={activeTool} p1={draftPoint} p2={hoverPoint} color={defaultColor} />
+        {previewDrawing && (
+          <DrawingShape
+            ctx={{ chart, series }}
+            drawing={previewDrawing}
+            selected={false}
+            allowClick={false}
+            containerWidth={containerWidth}
+            isPreview
+            onClick={() => {}}
+            onDoubleClick={() => {}}
+            onHandleDown={() => {}}
+          />
         )}
       </svg>
     </div>
   );
 }
 
-// ─── individual shape renderers ───
+// ─── preview builder ─────────────────────────────────────────
+
+function buildPreview(tool: DrawingTool, p1: DrawingPoint, p2: DrawingPoint, color: string): Drawing | null {
+  const base = { id: "__preview__", color };
+  switch (tool) {
+    case "hline":     return { ...base, kind: "hline", price: p2.price } satisfies HLineDrawing;
+    case "trendline": return { ...base, kind: "trendline", p1, p2 } satisfies TrendLineDrawing;
+    case "fib":       return { ...base, kind: "fib", p1, p2, levels: DEFAULT_FIB_LEVELS } satisfies FibDrawing;
+    case "text":      return { ...base, kind: "text", point: p2, text: "…" } satisfies TextDrawing;
+    default:          return null;
+  }
+}
+
+// ─── individual shape renderer with handles ──────────────────
 
 interface ShapeProps {
   ctx: { chart: IChartApi; series: ISeriesApi<"Candlestick"> };
   drawing: Drawing;
   selected: boolean;
-  onClick: () => void;
   allowClick: boolean;
   containerWidth: number;
+  isPreview?: boolean;
+  onClick: () => void;
+  onDoubleClick: () => void;
+  onHandleDown: (handle: "p1" | "p2" | "middle" | "single", e: React.PointerEvent) => void;
 }
 
-function DrawingShape({ ctx, drawing, selected, onClick, allowClick, containerWidth }: ShapeProps) {
+function DrawingShape({
+  ctx, drawing, selected, allowClick, containerWidth, isPreview,
+  onClick, onDoubleClick, onHandleDown,
+}: ShapeProps) {
   const stroke = drawing.color;
   const sw = (drawing.lineWidth ?? 1) + (selected ? 1 : 0);
-  const dash = selected ? "4 2" : undefined;
-  // `clickProps` is no longer used — each shape attaches its own hit area below
-  // with explicit pointerEvents="stroke" or pointerEvents="all" so transparent
-  // SVG shapes can actually receive mouse events.
-  void dash;
+  const dash = isPreview ? "3 3" : selected ? "4 2" : undefined;
+  const opacity = isPreview ? 0.6 : 1;
+
+  const clickable = allowClick && !isPreview;
+  const bodyHandlers = clickable ? {
+    onClick:       (e: React.MouseEvent) => { e.stopPropagation(); onClick(); },
+    onDoubleClick: (e: React.MouseEvent) => { e.stopPropagation(); onDoubleClick(); },
+  } : {};
 
   if (drawing.kind === "hline") {
     const y = ctx.series.priceToCoordinate(drawing.price);
@@ -184,19 +372,19 @@ function DrawingShape({ ctx, drawing, selected, onClick, allowClick, containerWi
     const labelW = Math.max(48, priceText.length * 7 + 8);
     const labelX = Math.max(0, containerWidth - labelW - 4);
     return (
-      <g>
-        {/* visible line spanning the chart width */}
+      <g opacity={opacity}>
         <line x1={0} y1={yn} x2={containerWidth} y2={yn}
               stroke={stroke} strokeWidth={sw} strokeDasharray={dash}
               pointerEvents="none" />
-        {/* fat invisible hit area */}
-        {allowClick && (
-          <line x1={0} y1={yn} x2={containerWidth} y2={yn} stroke="transparent" strokeWidth={HIT_DISTANCE * 2}
+        {clickable && (
+          <line x1={0} y1={yn} x2={containerWidth} y2={yn}
+                stroke="transparent" strokeWidth={HIT_DISTANCE * 2}
                 pointerEvents="stroke"
-                onClick={(e) => { e.stopPropagation(); onClick(); }}
-                style={{ cursor: "pointer" }} />
+                {...bodyHandlers}
+                onPointerDown={(e) => onHandleDown("middle", e)}
+                style={{ cursor: selected ? "grab" : "pointer" }} />
         )}
-        {/* price label on the right side of the chart */}
+        {/* price label on the right edge */}
         <g pointerEvents="none">
           <rect x={labelX} y={yn - 8} width={labelW} height={16}
                 fill={stroke} opacity={selected ? 1 : 0.85} rx={2} />
@@ -205,6 +393,13 @@ function DrawingShape({ ctx, drawing, selected, onClick, allowClick, containerWi
             {priceText}
           </text>
         </g>
+        {selected && !isPreview && (
+          <circle cx={containerWidth / 2} cy={yn} r={5}
+                  fill={stroke} stroke="white" strokeWidth={1}
+                  pointerEvents="all"
+                  onPointerDown={(e) => { e.stopPropagation(); onHandleDown("single", e); }}
+                  style={{ cursor: "grab" }} />
+        )}
       </g>
     );
   }
@@ -213,20 +408,31 @@ function DrawingShape({ ctx, drawing, selected, onClick, allowClick, containerWi
     const a = chartToPixel(ctx, drawing.p1);
     const b = chartToPixel(ctx, drawing.p2);
     if (a.x === null || a.y === null || b.x === null || b.y === null) return null;
+    const ax = a.x as number, ay = a.y as number;
+    const bx = b.x as number, by = b.y as number;
     return (
-      <g>
-        <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={stroke} strokeWidth={sw} strokeDasharray={dash} pointerEvents="none" />
-        {/* fat invisible hit area — pointerEvents="stroke" is the magic that makes transparent SVG strokes clickable */}
-        {allowClick && (
-          <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="transparent" strokeWidth={HIT_DISTANCE * 2}
+      <g opacity={opacity}>
+        <line x1={ax} y1={ay} x2={bx} y2={by}
+              stroke={stroke} strokeWidth={sw} strokeDasharray={dash}
+              pointerEvents="none" />
+        {clickable && (
+          <line x1={ax} y1={ay} x2={bx} y2={by}
+                stroke="transparent" strokeWidth={HIT_DISTANCE * 2}
                 pointerEvents="stroke"
-                onClick={(e) => { e.stopPropagation(); onClick(); }}
-                style={{ cursor: "pointer" }} />
+                {...bodyHandlers}
+                onPointerDown={(e) => onHandleDown("middle", e)}
+                style={{ cursor: selected ? "grab" : "pointer" }} />
         )}
-        {selected && (
+        {selected && !isPreview && (
           <>
-            <circle cx={a.x} cy={a.y} r={4} fill={stroke} pointerEvents="none" />
-            <circle cx={b.x} cy={b.y} r={4} fill={stroke} pointerEvents="none" />
+            <circle cx={ax} cy={ay} r={5} fill={stroke} stroke="white" strokeWidth={1}
+                    pointerEvents="all"
+                    onPointerDown={(e) => { e.stopPropagation(); onHandleDown("p1", e); }}
+                    style={{ cursor: "grab" }} />
+            <circle cx={bx} cy={by} r={5} fill={stroke} stroke="white" strokeWidth={1}
+                    pointerEvents="all"
+                    onPointerDown={(e) => { e.stopPropagation(); onHandleDown("p2", e); }}
+                    style={{ cursor: "grab" }} />
           </>
         )}
       </g>
@@ -242,36 +448,49 @@ function DrawingShape({ ctx, drawing, selected, onClick, allowClick, containerWi
     const x1 = Math.min(ax, bx);
     const x2 = Math.max(ax, bx);
     return (
-      <g>
-        {/* visual levels — non-interactive */}
+      <g opacity={opacity}>
         {drawing.levels.map((lvl) => {
-          const y = ay + (by - ay) * lvl;
+          const yLvl = ay + (by - ay) * lvl;
           const price = drawing.p1.price + (drawing.p2.price - drawing.p1.price) * lvl;
           return (
             <g key={lvl} pointerEvents="none">
-              <line x1={x1} y1={y} x2={x2} y2={y} stroke={stroke} strokeWidth={sw} strokeDasharray={selected ? "4 2" : "1 2"} opacity={0.8} />
-              <text x={x1 + 4} y={y - 3} fill={stroke} fontSize={9} fontFamily="monospace" opacity={0.9}>
+              <line x1={x1} y1={yLvl} x2={x2} y2={yLvl}
+                    stroke={stroke} strokeWidth={sw}
+                    strokeDasharray={selected ? "4 2" : "1 2"} opacity={0.8} />
+              <text x={x1 + 4} y={yLvl - 3} fill={stroke}
+                    fontSize={9} fontFamily="monospace" opacity={0.9}>
                 {(lvl * 100).toFixed(1)}% — {price.toFixed(2)}
               </text>
             </g>
           );
         })}
-        {/* main trendline */}
-        <line x1={ax} y1={ay} x2={bx} y2={by} stroke={stroke} strokeWidth={sw} opacity={0.6} pointerEvents="none" />
-        {/* fat invisible hit area on each level + main line for easy selection */}
-        {allowClick && (
-          <g onClick={(e) => { e.stopPropagation(); onClick(); }} style={{ cursor: "pointer" }}>
+        <line x1={ax} y1={ay} x2={bx} y2={by}
+              stroke={stroke} strokeWidth={sw} opacity={0.6} pointerEvents="none" />
+        {clickable && (
+          <g {...bodyHandlers}
+             onPointerDown={(e) => onHandleDown("middle", e)}
+             style={{ cursor: selected ? "grab" : "pointer" }}>
             {drawing.levels.map((lvl) => {
-              const y = ay + (by - ay) * lvl;
-              return <line key={lvl} x1={x1} y1={y} x2={x2} y2={y} stroke="transparent" strokeWidth={HIT_DISTANCE * 2} pointerEvents="stroke" />;
+              const yLvl = ay + (by - ay) * lvl;
+              return <line key={lvl} x1={x1} y1={yLvl} x2={x2} y2={yLvl}
+                           stroke="transparent" strokeWidth={HIT_DISTANCE * 2}
+                           pointerEvents="stroke" />;
             })}
-            <line x1={ax} y1={ay} x2={bx} y2={by} stroke="transparent" strokeWidth={HIT_DISTANCE * 2} pointerEvents="stroke" />
+            <line x1={ax} y1={ay} x2={bx} y2={by}
+                  stroke="transparent" strokeWidth={HIT_DISTANCE * 2}
+                  pointerEvents="stroke" />
           </g>
         )}
-        {selected && (
+        {selected && !isPreview && (
           <>
-            <circle cx={ax} cy={ay} r={4} fill={stroke} pointerEvents="none" />
-            <circle cx={bx} cy={by} r={4} fill={stroke} pointerEvents="none" />
+            <circle cx={ax} cy={ay} r={5} fill={stroke} stroke="white" strokeWidth={1}
+                    pointerEvents="all"
+                    onPointerDown={(e) => { e.stopPropagation(); onHandleDown("p1", e); }}
+                    style={{ cursor: "grab" }} />
+            <circle cx={bx} cy={by} r={5} fill={stroke} stroke="white" strokeWidth={1}
+                    pointerEvents="all"
+                    onPointerDown={(e) => { e.stopPropagation(); onHandleDown("p2", e); }}
+                    style={{ cursor: "grab" }} />
           </>
         )}
       </g>
@@ -282,53 +501,33 @@ function DrawingShape({ ctx, drawing, selected, onClick, allowClick, containerWi
     const p = chartToPixel(ctx, drawing.point);
     if (p.x === null || p.y === null) return null;
     const fs = drawing.fontSize ?? 12;
-    // Approximate the text bounding box so we can put a clickable rect under it.
     const w = Math.max(20, drawing.text.length * fs * 0.65);
     const h = fs * 1.5;
+    const px = p.x as number, py = p.y as number;
     return (
-      <g>
-        <text x={p.x} y={p.y} fill={stroke} fontSize={fs} fontFamily='"Segoe UI", sans-serif'
+      <g opacity={opacity}>
+        <text x={px} y={py} fill={stroke} fontSize={fs}
+              fontFamily='"Segoe UI", sans-serif'
               fontWeight={selected ? 700 : 500}
               pointerEvents="none"
               style={{ paintOrder: "stroke", stroke: "rgba(0,0,0,0.5)", strokeWidth: 2, strokeLinejoin: "round" }}>
           {drawing.text}
         </text>
-        {allowClick && (
-          <rect x={(p.x as number) - 2} y={(p.y as number) - h + fs * 0.2} width={w + 4} height={h}
+        {clickable && (
+          <rect x={px - 2} y={py - h + fs * 0.2} width={w + 4} height={h}
                 fill="transparent" pointerEvents="all"
-                onClick={(e) => { e.stopPropagation(); onClick(); }}
-                style={{ cursor: "pointer" }} />
+                {...bodyHandlers}
+                onPointerDown={(e) => onHandleDown("single", e)}
+                style={{ cursor: selected ? "grab" : "pointer" }} />
         )}
-        {selected && (
-          <rect x={(p.x as number) - 3} y={(p.y as number) - h + fs * 0.2} width={w + 6} height={h}
-                fill="none" stroke={stroke} strokeWidth={1} strokeDasharray="3 2" pointerEvents="none" />
+        {selected && !isPreview && (
+          <rect x={px - 3} y={py - h + fs * 0.2} width={w + 6} height={h}
+                fill="none" stroke={stroke} strokeWidth={1} strokeDasharray="3 2"
+                pointerEvents="none" />
         )}
       </g>
     );
   }
 
-  return null;
-}
-
-function DraftPreview({ ctx, tool, p1, p2, color }: { ctx: ShapeProps["ctx"]; tool: DrawingTool; p1: DrawingPoint; p2: DrawingPoint; color: string }) {
-  const a = chartToPixel(ctx, p1);
-  const b = chartToPixel(ctx, p2);
-  if (a.x === null || a.y === null || b.x === null || b.y === null) return null;
-  const ax = a.x as number, ay = a.y as number;
-  const bx = b.x as number, by = b.y as number;
-  if (tool === "trendline") {
-    return <line x1={ax} y1={ay} x2={bx} y2={by} stroke={color} strokeWidth={1} strokeDasharray="3 3" opacity={0.6} />;
-  }
-  if (tool === "fib") {
-    return (
-      <g opacity={0.6}>
-        {DEFAULT_FIB_LEVELS.map((lvl) => {
-          const y = ay + (by - ay) * lvl;
-          return <line key={lvl} x1={ax} y1={y} x2={bx} y2={y} stroke={color} strokeDasharray="2 3" />;
-        })}
-        <line x1={ax} y1={ay} x2={bx} y2={by} stroke={color} strokeDasharray="2 3" />
-      </g>
-    );
-  }
   return null;
 }
