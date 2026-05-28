@@ -87,27 +87,7 @@ export function ChartMosaic() {
                   ▾
                 </button>
               </div>
-              <div
-                className="chart-host"
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  try {
-                    const raw = e.dataTransfer.getData("application/x-indicator");
-                    if (!raw) return;
-                    const parsed = JSON.parse(raw) as { kind: string };
-                    if (!parsed.kind) return;
-                    const def = getIndicatorDef(parsed.kind);
-                    if (!def) return;
-                    addIndicator(i, {
-                      id: crypto.randomUUID(),
-                      kind: parsed.kind,
-                      params: { ...def.defaultParams },
-                      color: def.defaultColor,
-                    });
-                  } catch { /* ignore */ }
-                }}
-              >
+              <div className="chart-host">
                 <ChartPane
                   data={data}
                   symbol={cell.symbol}
