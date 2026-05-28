@@ -95,12 +95,12 @@ export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndic
         borderColor: border,
         timeVisible: true,
         secondsVisible: false,
-        // Pin the edges so dragging into them doesn't auto-zoom (squeeze/stretch the bars)
+        // Only the LEFT edge is pinned (can't scroll past the first bar).
+        // Right side has an empty buffer (rightOffset) so dragging right doesn't auto-zoom.
         fixLeftEdge: true,
-        fixRightEdge: true,
+        rightOffset: 12,
         lockVisibleTimeRangeOnResize: true,
-        rightBarStaysOnScroll: true,
-        // Floor on bar width so we can't get stuck in a "thin bars" state
+        // Floor on bar width so we can't get stuck with hair-thin bars
         minBarSpacing: 2,
       },
       // Disable drag-resize on axes (was making bars stretch/squeeze unexpectedly when user dragged)
@@ -217,9 +217,8 @@ export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndic
         secondsVisible: false,
         visible: true,
         fixLeftEdge: true,
-        fixRightEdge: true,
+        rightOffset: 12,
         lockVisibleTimeRangeOnResize: true,
-        rightBarStaysOnScroll: true,
         minBarSpacing: 2,
       },
       handleScale: {
