@@ -453,6 +453,70 @@ button { font-family: inherit; }
 .nav-item.disabled:hover { background: transparent; }
 
 /* ───────────── Bot config dialog ───────────── */
+/* ───────────── Indicator badges on chart ───────────── */
+.ind-badges {
+  position: absolute;
+  top: 30px;
+  left: 8px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  pointer-events: none;
+}
+.ind-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(13, 17, 23, 0.78);
+  border: 1px solid var(--border-soft);
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-size: 10.5px;
+  color: var(--fg-dim);
+  pointer-events: auto;
+  font-variant-numeric: tabular-nums;
+}
+.ind-badge-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  flex-shrink: 0;
+}
+.ind-badge-label { color: var(--fg); font-weight: 500; }
+.ind-badge-btn {
+  background: transparent;
+  border: 0;
+  color: var(--fg-mute);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0 3px;
+  line-height: 1;
+  font-family: inherit;
+  border-radius: 2px;
+}
+.ind-badge-btn:hover {
+  color: var(--accent);
+  background: rgba(240, 185, 11, 0.12);
+}
+
+/* ───────────── Indicator settings dialog ───────────── */
+.ind-cfg { display: flex; flex-direction: column; gap: 10px; padding: 4px 2px; }
+.ind-cfg-row {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 12px;
+  align-items: center;
+  font-size: 12px;
+}
+.ind-cfg-row > span:first-child { color: var(--fg-dim); }
+.ind-cfg-row input[type="number"], .ind-cfg-row select {
+  background: var(--bg-input); border: 1px solid var(--border);
+  color: var(--fg); padding: 5px 8px;
+  font-family: inherit; font-size: 12px; border-radius: 4px;
+  outline: none; font-variant-numeric: tabular-nums;
+}
+.ind-cfg-row input:focus, .ind-cfg-row select:focus { border-color: var(--accent); }
+.ind-cfg-buttons { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
+
 .bot-cfg { display: flex; flex-direction: column; gap: 10px; padding: 4px 2px; }
 .bot-cfg-row {
   display: grid; grid-template-columns: 140px 1fr; gap: 12px;

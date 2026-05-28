@@ -18,6 +18,7 @@ export interface ActiveIndicator {
   kind: string;           // e.g. "sma", "ema", "rsi"
   params: Record<string, number | string>;
   color?: string;
+  lineWidth?: number;     // 1..4, default 1
 }
 
 export interface Ticker {
@@ -137,6 +138,7 @@ interface Actions {
   setMosaicCell: (i: number, partial: Partial<MosaicCell>) => void;
   addIndicator: (cellIndex: number, ind: ActiveIndicator) => void;
   removeIndicator: (cellIndex: number, id: string) => void;
+  updateIndicator: (cellIndex: number, id: string, partial: Partial<ActiveIndicator>) => void;
 
   updateTicker: (t: Ticker) => void;
   setOrderbook: (ob: Orderbook | null) => void;
@@ -235,6 +237,16 @@ export const useStore = create<Store>()(
         const cell = cells[cellIndex];
         if (!cell) return s;
         cells[cellIndex] = { ...cell, indicators: cell.indicators.filter((i) => i.id !== id) };
+        return { mosaicCells: cells };
+      }),
+      updateIndicator: (cellIndex, id, partial) => set((s) => {
+        const cells = [...s.mosaicCells];
+        const cell = cells[cellIndex];
+        if (!cell) return s;
+        cells[cellIndex] = {
+          ...cell,
+          indicators: cell.indicators.map((i) => (i.id === id ? { ...i, ...partial } : i)),
+        };
         return { mosaicCells: cells };
       }),
 

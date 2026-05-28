@@ -20,6 +20,7 @@ export function ChartMosaic() {
   const setMosaicCell   = useStore((s) => s.setMosaicCell);
   const addIndicator    = useStore((s) => s.addIndicator);
   const removeIndicator = useStore((s) => s.removeIndicator);
+  const updateIndicator = useStore((s) => s.updateIndicator);
 
   const [activeCell, setActiveCell] = useState(0);
   const [pickerCell, setPickerCell] = useState<number | null>(null);
@@ -104,6 +105,7 @@ export function ChartMosaic() {
                     });
                   }}
                   onRemoveIndicator={(id) => removeIndicator(i, id)}
+                  onUpdateIndicator={(id, partial) => updateIndicator(i, id, partial)}
                 />
               </div>
             </div>

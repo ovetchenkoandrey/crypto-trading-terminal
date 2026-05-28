@@ -12,6 +12,7 @@ import {
 import type { Candle } from "../lib/types";
 import type { ActiveIndicator } from "../lib/store";
 import { getIndicatorDef } from "../lib/indicators/registry";
+import { IndicatorParamsDialog } from "./IndicatorParamsDialog";
 
 interface ChartPaneProps {
   data: Candle[];
@@ -20,6 +21,24 @@ interface ChartPaneProps {
   indicators?: ActiveIndicator[];
   onAddIndicator?: (kind: string) => void;
   onRemoveIndicator?: (id: string) => void;
+  onUpdateIndicator?: (id: string, partial: Partial<ActiveIndicator>) => void;
+}
+
+function indicatorLabel(ind: ActiveIndicator): string {
+  const def = getIndicatorDef(ind.kind);
+  const baseName = def?.name ?? ind.kind;
+  const p = ind.params;
+  switch (ind.kind) {
+    case "sma":
+    case "ema":
+    case "rsi":
+    case "bollinger":
+      return `${baseName} (${p.period})`;
+    case "macd":
+      return `${baseName} (${p.fast}/${p.slow}/${p.signal})`;
+    default:
+      return baseName;
+  }
 }
 
 interface OhlcDisplay {
@@ -42,7 +61,7 @@ interface IndSeriesSet {
   isPaneChart: boolean;
 }
 
-export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndicator, onRemoveIndicator }: ChartPaneProps) {
+export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndicator, onRemoveIndicator, onUpdateIndicator }: ChartPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const paneContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -53,6 +72,7 @@ export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndic
   const lastLenRef = useRef<number>(0);
   const indSeriesRef = useRef<IndSeriesSet[]>([]);
   const [ohlc, setOhlc] = useState<OhlcDisplay | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   // Track whether we need the pane chart
   const hasPaneIndicators = indicators.some((ind) => {
@@ -367,10 +387,11 @@ export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndic
         }
       } else {
         // Create new series
+        const lw = (ind.lineWidth ?? 1) as 1 | 2 | 3 | 4;
         const lineSeries: ISeriesApi<"Line">[] = output.lines.map((line) => {
           const s = targetChart.addSeries(LineSeries, {
             color: line.color,
-            lineWidth: 1,
+            lineWidth: lw,
             priceScaleId: isPaneChart ? "right" : "",
             lastValueVisible: true,
             priceLineVisible: false,
@@ -471,31 +492,46 @@ export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndic
           )}
         </div>
       )}
-      {!isEmpty && indicators.length > 0 && onRemoveIndicator && (
-        <div style={{
-          position: "absolute", top: 30, left: 8, zIndex: 10,
-          display: "flex", flexDirection: "column", gap: 2,
-        }}>
+      {!isEmpty && indicators.length > 0 && (
+        <div className="ind-badges">
           {indicators.map((ind) => {
             const def = getIndicatorDef(ind.kind);
+            const dotColor = ind.color || def?.defaultColor || "#888";
             return (
-              <div key={ind.id} style={{
-                display: "flex", alignItems: "center", gap: 4,
-                background: "rgba(13,17,23,0.75)", borderRadius: 3,
-                padding: "1px 5px", fontSize: 10,
-              }}>
-                <span style={{ width: 8, height: 8, borderRadius: "50%", background: ind.color || def?.defaultColor || "#888", flexShrink: 0, display: "inline-block" }} />
-                <span style={{ color: "var(--fg-dim)" }}>{def?.name ?? ind.kind}</span>
-                <button
-                  style={{ background: "transparent", border: 0, color: "var(--fg-mute)", cursor: "pointer", fontSize: 10, padding: "0 1px", lineHeight: 1 }}
-                  onClick={() => onRemoveIndicator(ind.id)}
-                  title="Удалить"
-                >×</button>
+              <div key={ind.id} className="ind-badge">
+                <span className="ind-badge-dot" style={{ background: dotColor }} />
+                <span className="ind-badge-label">{indicatorLabel(ind)}</span>
+                {onUpdateIndicator && (
+                  <button
+                    className="ind-badge-btn"
+                    onClick={() => setEditingId(ind.id)}
+                    title="Параметры"
+                  >⚙</button>
+                )}
+                {onRemoveIndicator && (
+                  <button
+                    className="ind-badge-btn"
+                    onClick={() => onRemoveIndicator(ind.id)}
+                    title="Удалить"
+                  >×</button>
+                )}
               </div>
             );
           })}
         </div>
       )}
+
+      {editingId && onUpdateIndicator && (() => {
+        const ind = indicators.find((i) => i.id === editingId);
+        if (!ind) return null;
+        return (
+          <IndicatorParamsDialog
+            indicator={ind}
+            onSave={(partial) => onUpdateIndicator(ind.id, partial)}
+            onClose={() => setEditingId(null)}
+          />
+        );
+      })()}
     </div>
   );
 }
