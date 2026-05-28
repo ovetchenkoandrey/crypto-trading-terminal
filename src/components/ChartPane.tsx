@@ -4,6 +4,7 @@ import {
   CandlestickSeries,
   HistogramSeries,
   LineSeries,
+  CrosshairMode,
   type IChartApi,
   type ISeriesApi,
   type UTCTimestamp,
@@ -87,6 +88,9 @@ export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndic
         horzLines: { color: grid },
       },
       crosshair: {
+        // Magnet to nearest of O/H/L/C of the hovered candle when cursor is close.
+        // Falls back to Magnet (close) when far — that's MagnetOHLC's built-in behavior.
+        mode: CrosshairMode.MagnetOHLC,
         vertLine: { color: fgDim, labelBackgroundColor: bgPanel },
         horzLine: { color: fgDim, labelBackgroundColor: bgPanel },
       },
@@ -203,6 +207,9 @@ export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndic
       },
       grid: { vertLines: { color: grid }, horzLines: { color: grid } },
       crosshair: {
+        // Magnet to nearest of O/H/L/C of the hovered candle when cursor is close.
+        // Falls back to Magnet (close) when far — that's MagnetOHLC's built-in behavior.
+        mode: CrosshairMode.MagnetOHLC,
         vertLine: { color: fgDim, labelBackgroundColor: bgPanel },
         horzLine: { color: fgDim, labelBackgroundColor: bgPanel },
       },
