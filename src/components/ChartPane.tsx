@@ -91,7 +91,18 @@ export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndic
         horzLine: { color: fgDim, labelBackgroundColor: bgPanel },
       },
       rightPriceScale: { borderColor: border },
-      timeScale: { borderColor: border, timeVisible: true, secondsVisible: false },
+      timeScale: {
+        borderColor: border,
+        timeVisible: true,
+        secondsVisible: false,
+        // Pin the edges so dragging into them doesn't auto-zoom (squeeze/stretch the bars)
+        fixLeftEdge: true,
+        fixRightEdge: true,
+        lockVisibleTimeRangeOnResize: true,
+        rightBarStaysOnScroll: true,
+        // Floor on bar width so we can't get stuck in a "thin bars" state
+        minBarSpacing: 2,
+      },
       // Disable drag-resize on axes (was making bars stretch/squeeze unexpectedly when user dragged)
       handleScale: {
         axisPressedMouseMove: { time: false, price: false },
@@ -105,6 +116,8 @@ export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndic
         horzTouchDrag: true,
         vertTouchDrag: false,
       },
+      // No kinetic flick on mouse — it kept zooming after release
+      kineticScroll: { mouse: false, touch: true },
     });
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
@@ -198,7 +211,17 @@ export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndic
         horzLine: { color: fgDim, labelBackgroundColor: bgPanel },
       },
       rightPriceScale: { borderColor: border },
-      timeScale: { borderColor: border, timeVisible: true, secondsVisible: false, visible: true },
+      timeScale: {
+        borderColor: border,
+        timeVisible: true,
+        secondsVisible: false,
+        visible: true,
+        fixLeftEdge: true,
+        fixRightEdge: true,
+        lockVisibleTimeRangeOnResize: true,
+        rightBarStaysOnScroll: true,
+        minBarSpacing: 2,
+      },
       handleScale: {
         axisPressedMouseMove: { time: false, price: false },
         axisDoubleClickReset: false,
@@ -211,6 +234,7 @@ export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndic
         horzTouchDrag: true,
         vertTouchDrag: false,
       },
+      kineticScroll: { mouse: false, touch: true },
     });
 
     paneChartRef.current = paneChart;
