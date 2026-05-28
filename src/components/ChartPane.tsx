@@ -92,6 +92,19 @@ export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndic
       },
       rightPriceScale: { borderColor: border },
       timeScale: { borderColor: border, timeVisible: true, secondsVisible: false },
+      // Disable drag-resize on axes (was making bars stretch/squeeze unexpectedly when user dragged)
+      handleScale: {
+        axisPressedMouseMove: { time: false, price: false },
+        axisDoubleClickReset: false,
+        mouseWheel: true,
+        pinch: true,
+      },
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: false,
+      },
     });
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
@@ -186,22 +199,37 @@ export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndic
       },
       rightPriceScale: { borderColor: border },
       timeScale: { borderColor: border, timeVisible: true, secondsVisible: false, visible: true },
+      handleScale: {
+        axisPressedMouseMove: { time: false, price: false },
+        axisDoubleClickReset: false,
+        mouseWheel: true,
+        pinch: true,
+      },
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: false,
+      },
     });
 
     paneChartRef.current = paneChart;
 
-    // Sync time scale with main chart
+    // Sync time scale between main and pane (guarded against ping-pong)
     const mainChart = chartRef.current;
     if (mainChart) {
+      let syncing = false;
       mainChart.timeScale().subscribeVisibleTimeRangeChange((range) => {
-        if (range && paneChartRef.current) {
-          paneChartRef.current.timeScale().setVisibleRange(range);
-        }
+        if (syncing || !range || !paneChartRef.current) return;
+        syncing = true;
+        try { paneChartRef.current.timeScale().setVisibleRange(range); }
+        finally { syncing = false; }
       });
       paneChart.timeScale().subscribeVisibleTimeRangeChange((range) => {
-        if (range && chartRef.current) {
-          chartRef.current.timeScale().setVisibleRange(range);
-        }
+        if (syncing || !range || !chartRef.current) return;
+        syncing = true;
+        try { chartRef.current.timeScale().setVisibleRange(range); }
+        finally { syncing = false; }
       });
     }
 
@@ -241,12 +269,14 @@ export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndic
     });
 
     const prevLen = lastLenRef.current;
-    const lenJump = data.length > prevLen + 1 || data.length < prevLen || prevLen === 0;
+    const isInitial = prevLen === 0;
+    const bigJump = data.length > prevLen + 1 || data.length < prevLen;
 
-    if (lenJump) {
+    if (isInitial || bigJump) {
       candleSeries.setData(data.map(toCandle));
       volumeSeries.setData(data.map(toVol));
-      chart.timeScale().fitContent();
+      // Only fit content on first load — preserves user's scroll/zoom afterwards
+      if (isInitial) chart.timeScale().fitContent();
     } else {
       candleSeries.update(toCandle(last));
       volumeSeries.update(toVol(last));
