@@ -18,6 +18,7 @@ import { getIndicatorDef } from "../lib/indicators/registry";
 import { IndicatorParamsDialog } from "./IndicatorParamsDialog";
 import { SvgDrawingOverlay } from "./SvgDrawingOverlay";
 import { DrawingParamsDialog } from "./DrawingParamsDialog";
+import { useStore } from "../lib/store";
 
 interface ChartPaneProps {
   data: Candle[];
@@ -93,6 +94,16 @@ export function ChartPane({
   const [selectedDrawing, setSelectedDrawing] = useState<string | null>(null);
   const [editingDrawing, setEditingDrawing] = useState<string | null>(null);
   const [chartReady, setChartReady] = useState(0);   // bumped after series exist to mount overlay
+  const disableMagnetOnSelection = useStore((s) => s.settings.drawings.disableMagnetOnSelection);
+
+  // Toggle crosshair magnet based on whether a drawing is selected — keeps the
+  // crosshair out of the way while you're editing handles.
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const mode = (selectedDrawing && disableMagnetOnSelection) ? CrosshairMode.Normal : CrosshairMode.MagnetOHLC;
+    chart.applyOptions({ crosshair: { mode } });
+  }, [selectedDrawing, disableMagnetOnSelection]);
 
   // Track whether we need the pane chart
   const hasPaneIndicators = indicators.some((ind) => {

@@ -3,6 +3,7 @@ import { useStore } from "../lib/store";
 import type { BotConfig } from "../lib/store";
 import { BotConfigDialog } from "./bots/BotConfigDialog";
 import { getBotFactory } from "../lib/bots/registry";
+import { closeAllPositions, exportHistoryCsv } from "../lib/scripts";
 
 function dragStart(e: React.DragEvent, kind: string) {
   e.dataTransfer.setData("application/x-indicator", JSON.stringify({ kind }));
@@ -21,7 +22,7 @@ const DRAGGABLE_INDICATORS: { label: string; kind: string }[] = [
 
 const BOT_TEMPLATES: { label: string; kind: string; available: boolean }[] = [
   { label: "Grid Bot",        kind: "grid", available: true  },
-  { label: "DCA Strategy",    kind: "dca",  available: false },
+  { label: "DCA Strategy",    kind: "dca",  available: true  },
   { label: "MA Crossover EA", kind: "mac",  available: false },
   { label: "Mean Reversion",  kind: "mr",   available: false },
 ];
@@ -99,8 +100,12 @@ export function Navigator() {
         )}
 
         <div className="nav-cat"><span className="chev">▾</span>📜 Скрипты</div>
-        <div className="nav-item disabled"><span className="ico">📜</span>close_all_positions</div>
-        <div className="nav-item disabled"><span className="ico">📜</span>export_history_csv</div>
+        <div className="nav-item" onClick={closeAllPositions} title="Закрыть все открытые позиции по рынку">
+          <span className="ico">📜</span>close_all_positions
+        </div>
+        <div className="nav-item" onClick={exportHistoryCsv} title="Скачать историю сделок в CSV">
+          <span className="ico">📜</span>export_history_csv
+        </div>
       </div>
 
       {openBot && (
