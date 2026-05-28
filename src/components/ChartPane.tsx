@@ -316,8 +316,8 @@ export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndic
     const prevLen = lastLenRef.current;
     const isInitial = prevLen === 0;
     const bigJump = data.length > prevLen + 1 || data.length < prevLen;
-    // Covers the case where WS ticks 1-2 candles in before REST arrives with 200 —
-    // we still want to fit content on that first big drop, not just on the very first paint.
+    // Covers the case where WS ticks 1-2 candles in before REST arrives with the full set —
+    // we still want to reset the view on that first big drop, not just on the very first paint.
     const firstFullLoad = bigJump && data.length > 50 && prevLen < 50;
 
     if (isInitial || bigJump) {
@@ -325,8 +325,18 @@ export function ChartPane({ data, symbol, timeframe, indicators = [], onAddIndic
       volumeSeries.setData(data.map(toVol));
       // Defer one frame so the chart definitely knows its post-layout size.
       if (isInitial || firstFullLoad) {
+        // Show last 200 bars by default; older history is still in memory and reachable by scrolling left.
+        const VISIBLE_BARS = 200;
+        const total = data.length;
         requestAnimationFrame(() => {
-          chartRef.current?.timeScale().fitContent();
+          const ts = chartRef.current?.timeScale();
+          if (!ts) return;
+          if (total <= VISIBLE_BARS) {
+            ts.fitContent();
+          } else {
+            // rightOffset=6 lives in chart options, include it on the right so the latest candle isn't glued to the price axis
+            ts.setVisibleLogicalRange({ from: total - VISIBLE_BARS, to: total + 6 });
+          }
         });
       }
     } else {

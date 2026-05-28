@@ -39,7 +39,7 @@ export function ChartMosaic() {
       wantedKline.add(`kline.${c.timeframe}.${c.symbol}`);
       wantedTickers.add(`tickers.${c.symbol}`);
       if (!candles[key] || candles[key].length === 0) {
-        fetchKlines(c.symbol, c.timeframe as Interval, 200)
+        fetchKlines(c.symbol, c.timeframe as Interval, 1000)
           .then((data) => setCandles(key, data))
           .catch((err: unknown) => logError("rest", `klines ${c.symbol}.${c.timeframe}: ${err instanceof Error ? err.message : String(err)}`));
       }
