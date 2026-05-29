@@ -47,11 +47,12 @@ export function OrderBook() {
   const mid = ticker?.lastPrice ?? ((asks[0]?.price ?? 0) + (bids[0]?.price ?? 0)) / 2;
   const dir = ticker ? (ticker.change24h >= 0 ? "up" : "dn") : "up";
 
-  // Click on an ask line → buy that price (you'd be lifting the offer);
-  // click on a bid line → sell at that price.
+  // Maker semantics, matching the chart: clicking ABOVE the current mid (an ask row)
+  // sets up a Sell Limit; clicking BELOW the mid (a bid row) sets up a Buy Limit.
+  // "I want to sell higher" → click above. "I want to buy lower" → click below.
   function handleRowClick(e: React.MouseEvent, price: number, kind: "ask" | "bid", qty: number) {
     void qty;
-    const side = kind === "ask" ? "buy" : "sell";
+    const side = kind === "ask" ? "sell" : "buy";
 
     if (e.shiftKey && dangerous.shiftClickOrderbook) {
       // Quick market — see firstShown for training confirm.
@@ -116,9 +117,9 @@ export function OrderBook() {
             key={"a" + l.price}
             className="ob-row ask"
             style={{ "--bar-w": `${(l.qty / maxQ * 100).toFixed(0)}%` } as React.CSSProperties}
-            title={`клик → Buy Limit @ ${fmtPrice(l.price, precision)}` +
+            title={`клик → Sell Limit @ ${fmtPrice(l.price, precision)}` +
                    (dangerous.shiftClickOrderbook
-                     ? ` · ⇧клик → Market Buy ${lastUsedQty || 0.001} ⚡`
+                     ? ` · ⇧клик → Market Sell ${lastUsedQty || 0.001} ⚡`
                      : "")}
             onClick={(e) => handleRowClick(e, l.price, "ask", l.qty)}
           >
@@ -140,9 +141,9 @@ export function OrderBook() {
             key={"b" + l.price}
             className="ob-row bid"
             style={{ "--bar-w": `${(l.qty / maxQ * 100).toFixed(0)}%` } as React.CSSProperties}
-            title={`клик → Sell Limit @ ${fmtPrice(l.price, precision)}` +
+            title={`клик → Buy Limit @ ${fmtPrice(l.price, precision)}` +
                    (dangerous.shiftClickOrderbook
-                     ? ` · ⇧клик → Market Sell ${lastUsedQty || 0.001} ⚡`
+                     ? ` · ⇧клик → Market Buy ${lastUsedQty || 0.001} ⚡`
                      : "")}
             onClick={(e) => handleRowClick(e, l.price, "bid", l.qty)}
           >
