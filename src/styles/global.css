@@ -1413,3 +1413,160 @@ button { font-family: inherit; }
   background: var(--accent); color: #000; border-color: var(--accent); font-weight: 600;
 }
 .tt-btn.primary:hover { filter: brightness(1.1); }
+
+/* ───────────── Strategy Tester ───────────── */
+.tester-body { padding: 14px 16px; }
+.tester-empty {
+  padding: 20px; text-align: center; color: var(--fg-mute);
+  background: var(--bg-input); border: 1px dashed var(--border);
+  border-radius: 4px; margin-bottom: 12px;
+}
+.tester-error {
+  padding: 10px 14px; background: rgba(239,83,80,0.1);
+  border: 1px solid var(--red); border-radius: 4px; color: var(--fg);
+  margin-bottom: 12px;
+}
+
+.tester-form {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px;
+  margin-bottom: 12px;
+}
+.tf-col { display: flex; flex-direction: column; gap: 10px; }
+.tf-field { display: flex; flex-direction: column; gap: 3px; }
+.tf-field label {
+  color: var(--fg-mute); font-size: 10px;
+  text-transform: uppercase; letter-spacing: 0.4px;
+}
+.tf-field input, .tf-field select {
+  background: var(--bg-input); border: 1px solid var(--border); color: var(--fg);
+  padding: 6px 8px; border-radius: 3px; font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.tf-field input:focus, .tf-field select:focus { outline: none; border-color: var(--accent); }
+
+.tester-mode-strip { display: flex; gap: 6px; }
+.tester-mode-strip button {
+  flex: 1; background: var(--bg-input); border: 1px solid var(--border); color: var(--fg-dim);
+  padding: 8px 6px; border-radius: 4px; cursor: pointer;
+  font: inherit; text-align: left;
+}
+.tester-mode-strip button:hover { background: var(--bg-hover); color: var(--fg); }
+.tester-mode-strip button.active {
+  background: var(--accent-soft); border-color: var(--accent); color: var(--accent);
+}
+.tester-mode-strip .lbl { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
+.tester-mode-strip .desc { font-size: 10px; color: var(--fg-mute); }
+.tester-mode-strip button.active .desc { color: var(--fg-dim); }
+
+.tester-seg {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: 3px; overflow: hidden;
+}
+.tester-seg button {
+  background: transparent; color: var(--fg-dim); border: 0; padding: 6px 0;
+  cursor: pointer; font: inherit; font-size: 11px;
+  border-right: 1px solid var(--border);
+}
+.tester-seg button:last-child { border-right: 0; }
+.tester-seg button.active {
+  background: var(--accent-soft); color: var(--accent); font-weight: 600;
+}
+
+.tester-controls {
+  display: flex; gap: 8px; align-items: center;
+  padding: 10px 0; border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+.tester-controls .dim { color: var(--fg-dim); font-size: 11px; }
+.pbtn {
+  background: var(--accent); color: #000; border: 0;
+  padding: 8px 18px; border-radius: 3px; cursor: pointer;
+  font: inherit; font-weight: 600; font-size: 12px;
+}
+.pbtn:hover { filter: brightness(1.1); }
+.pbtn:disabled { background: var(--bg-input); color: var(--fg-mute); cursor: not-allowed; }
+.pbtn.primary { background: var(--accent); color: #000; }
+.pbtn.ghost {
+  background: var(--bg-input); color: var(--fg); border: 1px solid var(--border);
+}
+.pbtn.danger { background: var(--red); color: #fff; }
+
+.tester-running-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 10px;
+}
+.tester-running-head b { font-size: 13px; }
+.tester-running-head .dim { color: var(--fg-dim); font-size: 11px; }
+.tester-progress { margin-bottom: 12px; }
+.tester-progress .row { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; }
+.tester-progress .pbar {
+  height: 6px; background: var(--bg-input); border-radius: 3px; overflow: hidden;
+}
+.tester-progress .pbar > div {
+  height: 100%; background: var(--accent); transition: width 0.2s;
+}
+
+.tester-live-stats {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+  margin-bottom: 8px;
+}
+.tester-stat {
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: 3px; padding: 8px 10px;
+}
+.tester-stat .lbl { color: var(--fg-mute); font-size: 10px; text-transform: uppercase; }
+.tester-stat .val { font-size: 16px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.tester-stat .val.pnl-pos { color: var(--green); }
+.tester-stat .val.pnl-neg { color: var(--red); }
+
+.tester-results {
+  display: grid; grid-template-columns: 280px 1fr; gap: 14px;
+  margin-bottom: 12px;
+}
+.tester-stats-block {
+  background: var(--bg-panel); border: 1px solid var(--border); border-radius: 4px;
+  padding: 10px 12px;
+}
+.tester-stats-block h3 {
+  font-size: 11px; color: var(--fg-mute); text-transform: uppercase;
+  letter-spacing: 0.5px; margin: 0 0 8px;
+}
+.tester-stats-block .stat-row {
+  display: flex; justify-content: space-between; padding: 4px 0;
+  border-bottom: 1px solid var(--border-soft);
+  font-variant-numeric: tabular-nums; font-size: 11px;
+}
+.tester-stats-block .stat-row:last-child { border-bottom: 0; }
+.tester-stats-block .stat-row .k { color: var(--fg-dim); }
+.tester-stats-block .v.pnl-pos { color: var(--green); }
+.tester-stats-block .v.pnl-neg { color: var(--red); }
+
+.tester-equity {
+  background: var(--bg-panel); border: 1px solid var(--border); border-radius: 4px;
+  overflow: hidden;
+}
+.eq-head {
+  display: flex; justify-content: space-between;
+  background: var(--bg-input); padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--fg-mute); font-size: 10px;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.tester-equity svg { width: 100%; height: 184px; display: block; }
+.eq-empty { padding: 60px; text-align: center; color: var(--fg-mute); }
+
+.tester-trades {
+  width: 100%; border-collapse: collapse;
+  font-size: 11px; font-variant-numeric: tabular-nums;
+}
+.tester-trades th {
+  text-align: left; color: var(--fg-mute);
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px;
+  font-weight: 500; padding: 6px 8px;
+  background: var(--bg-input); border-bottom: 1px solid var(--border);
+}
+.tester-trades td {
+  padding: 5px 8px; border-bottom: 1px solid var(--border-soft);
+}
+.tester-trades tr:hover td { background: var(--bg-hover); }

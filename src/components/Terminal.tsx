@@ -4,24 +4,33 @@ import { fmtPrice, fmtUsdt } from "../lib/format";
 import { getPricePrecision } from "../lib/symbols";
 import { venue } from "../lib/execution/router";
 import { logWarn } from "../lib/eventBus";
+import { Tester } from "./tester/Tester";
+import { useTesterStore } from "../lib/backtest/store";
 
-type TabKey = "positions" | "orders" | "history" | "alerts" | "journal";
+type TabKey = "positions" | "orders" | "history" | "alerts" | "journal" | "tester";
 
 export function Terminal() {
   const [tab, setTab] = useState<TabKey>("journal");
 
-  const positions  = useStore((s) => s.paperPositions);
-  const allOrders  = useStore((s) => s.paperOrders);
-  const history    = useStore((s) => s.paperHistory);
-  const journal    = useStore((s) => s.journal);
+  const positions   = useStore((s) => s.paperPositions);
+  const allOrders   = useStore((s) => s.paperOrders);
+  const history     = useStore((s) => s.paperHistory);
+  const journal     = useStore((s) => s.journal);
+  const testerState = useTesterStore((s) => s.state);
   const orders     = useMemo(() => allOrders.filter((o) => o.status === "pending"), [allOrders]);
 
-  const TABS: { key: TabKey; label: string; badge?: number }[] = [
+  const testerBadge =
+    testerState === "loading" || testerState === "running" ? "▶" :
+    testerState === "done"  ? "✓" :
+    testerState === "error" ? "!" : undefined;
+
+  const TABS: { key: TabKey; label: string; badge?: number | string }[] = [
     { key: "positions", label: "Позиции",         badge: positions.length },
     { key: "orders",    label: "Открытые ордера", badge: orders.length },
     { key: "history",   label: "История сделок",  badge: history.length },
     { key: "alerts",    label: "Алерты" },
     { key: "journal",   label: "Журнал",          badge: journal.length },
+    { key: "tester",    label: "Тестер",          badge: testerBadge },
   ];
 
   return (
@@ -30,11 +39,12 @@ export function Terminal() {
         {TABS.map((t) => (
           <button
             key={t.key}
+            data-testid={`term-tab-${t.key}`}
             className={"tab" + (t.key === tab ? " active" : "")}
             onClick={() => setTab(t.key)}
           >
             {t.label}
-            {t.badge !== undefined && t.badge > 0 && <span className="badge">{t.badge}</span>}
+            {t.badge !== undefined && t.badge !== 0 && t.badge !== "" && <span className="badge">{t.badge}</span>}
           </button>
         ))}
       </div>
@@ -44,6 +54,7 @@ export function Terminal() {
         {tab === "history"   && <HistoryTable />}
         {tab === "alerts"    && <EmptyPlaceholder label="Алертов нет" />}
         {tab === "journal"   && <Journal />}
+        {tab === "tester"    && <Tester />}
       </div>
     </div>
   );
