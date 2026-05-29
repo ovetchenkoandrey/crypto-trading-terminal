@@ -8,8 +8,7 @@ import type {
   Ticker,
 } from "../store";
 import { logInfo, logOk, logWarn, bus } from "../eventBus";
-
-const FEE_RATE = 0.001; // 0.1% — Bybit spot taker fee approximation
+import { applySlippage } from "../execution/slippage";
 
 function uid(prefix: string): string {
   return prefix + "-" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -62,10 +61,12 @@ class PaperTradingEngine {
     st.setPaperOrders([...st.paperOrders, order]);
     logInfo("paper", `order placed: ${order.side} ${order.qty} ${order.symbol} @ ${order.price} (${order.type})${order.botId ? " bot=" + order.botId : ""}`);
 
-    // Market orders execute immediately at the current tick price
+    // Market orders execute immediately at the current tick price (+ slippage)
     if (order.type === "market") {
       const t = st.tickers[order.symbol];
-      const fillPrice = t?.lastPrice ?? order.price;
+      const ref = t?.lastPrice ?? order.price;
+      const cfg = st.settings.paperTrading.slippage;
+      const fillPrice = applySlippage(ref, order.side, order.qty, t, cfg);
       this.fillOrder(order, fillPrice);
     }
     return order;
@@ -120,6 +121,8 @@ class PaperTradingEngine {
   /* ───────────────── matching engine ───────────────── */
   private onTick(symbol: string, lastPrice: number): void {
     const st = useStore.getState();
+    const ticker = st.tickers[symbol];
+    const slipCfg = st.settings.paperTrading.slippage;
     const pending = st.paperOrders.filter((o) => o.status === "pending" && o.symbol === symbol);
     for (const o of pending) {
       const trigger =
@@ -129,7 +132,13 @@ class PaperTradingEngine {
         o.type === "stop"  && o.side === "sell" && lastPrice <= o.price ? true :
         false;
       if (trigger) {
-        this.fillOrder(o, o.price);
+        // Limit orders fill at the limit price exactly (no slippage — you ARE the maker).
+        // Stop orders become market on trigger and ARE subject to slippage.
+        const ref = o.price;
+        const fillPrice = o.type === "stop"
+          ? applySlippage(ref, o.side, o.qty, ticker, slipCfg)
+          : ref;
+        this.fillOrder(o, fillPrice);
       }
     }
   }
@@ -142,7 +151,7 @@ class PaperTradingEngine {
     st.setPaperOrders(orders);
 
     // Apply to balance and positions
-    const fee = order.qty * fillPrice * FEE_RATE;
+    const fee = order.qty * fillPrice * st.settings.paperTrading.feeRate;
 
     // Look up an existing position on the same symbol (any side) belonging to the same scope (bot or manual)
     const sameSide = st.paperPositions.find(

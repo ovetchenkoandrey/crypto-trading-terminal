@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Modal } from "./Modal";
 import { useStore } from "../lib/store";
-import type { Settings, FontScale, ChartType, HistoryDepth, PnlMode, HistoryProvider } from "../lib/settings";
+import type { Settings, FontScale, ChartType, HistoryDepth, PnlMode, HistoryProvider, SlippageKind } from "../lib/settings";
 import { TIMEFRAMES } from "../lib/symbols";
 
 type TabKey =
@@ -103,10 +103,11 @@ function Field({ label, hint, children }: FieldProps) {
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="settings-section">
       <h2>{title}</h2>
+      {hint && <div className="settings-sub" style={{ marginTop: -4, marginBottom: 8 }}>{hint}</div>}
       {children}
     </div>
   );
@@ -333,6 +334,43 @@ function PaperTab({ draft, setDraft }: DraftProps) {
                         options={[{value: "abs", label: "В USDT"}, {value: "pct", label: "В процентах"}]}
                         onChange={(v) => upd({ pnlMode: v })} />
         </Field>
+      </Section>
+
+      <Section title="Проскальзывание" hint="Применяется к market-ордерам и stop-ордерам после триггера. Limit-ордера исполняются ровно по своей цене.">
+        <Field label="Модель">
+          <Seg<SlippageKind> value={p.slippage.kind}
+                             options={[
+                               { value: "none",          label: "Off" },
+                               { value: "fixed_bps",     label: "Fixed bps" },
+                               { value: "spread_pct",    label: "% спреда" },
+                               { value: "volume_impact", label: "Volume impact" },
+                             ]}
+                             onChange={(v) => upd({ slippage: { ...p.slippage, kind: v } })} />
+        </Field>
+        {p.slippage.kind === "fixed_bps" && (
+          <Field label="Slippage, bps" hint="1 bps = 0.01%. Типично 1–5 bps для ликвидных пар.">
+            <input type="number" min={0} step={0.1} value={p.slippage.bps}
+                   onChange={(e) => upd({ slippage: { ...p.slippage, bps: +e.target.value || 0 } })} />
+          </Field>
+        )}
+        {p.slippage.kind === "spread_pct" && (
+          <Field label="Доля спреда (0..1)" hint="0.5 = половина текущего bid-ask спреда">
+            <input type="number" min={0} max={1} step={0.05} value={p.slippage.spreadPct}
+                   onChange={(e) => upd({ slippage: { ...p.slippage, spreadPct: +e.target.value || 0 } })} />
+          </Field>
+        )}
+        {p.slippage.kind === "volume_impact" && (
+          <>
+            <Field label="Коэффициент k, bps" hint="impact = k · sqrt(qty / refQty), в базисных пунктах">
+              <input type="number" min={0} step={0.1} value={p.slippage.impactK}
+                     onChange={(e) => upd({ slippage: { ...p.slippage, impactK: +e.target.value || 0 } })} />
+            </Field>
+            <Field label="Reference qty" hint="Объём, для которого impact = k bps">
+              <input type="number" min={0} step={0.1} value={p.slippage.impactRefQty}
+                     onChange={(e) => upd({ slippage: { ...p.slippage, impactRefQty: +e.target.value || 0 } })} />
+            </Field>
+          </>
+        )}
       </Section>
 
       <Section title="Опасная зона">

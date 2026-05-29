@@ -38,10 +38,21 @@ export interface DrawingSettings {
   disableMagnetOnSelection:   boolean;   // turn off crosshair magnet when a drawing is selected
 }
 
+export type SlippageKind = "none" | "fixed_bps" | "spread_pct" | "volume_impact";
+
+export interface SlippageSettings {
+  kind:        SlippageKind;
+  bps:         number;     // for kind=fixed_bps — basis points (1 bps = 0.01%)
+  spreadPct:   number;     // for kind=spread_pct — fraction of bid-ask spread (0..1)
+  impactK:     number;     // for kind=volume_impact — bps multiplier
+  impactRefQty:number;     // reference qty for sqrt scaling
+}
+
 export interface PaperTradingSettings {
   initialBalance:    number;
   feeRate:           number;       // 0.001 = 0.1%
   pnlMode:           PnlMode;
+  slippage:          SlippageSettings;
 }
 
 export interface NotificationSettings {
@@ -111,6 +122,13 @@ export const DEFAULT_SETTINGS: Settings = {
     initialBalance: 10000,
     feeRate:        0.001,
     pnlMode:        "abs",
+    slippage: {
+      kind:         "fixed_bps",
+      bps:          2,        // 2 bps = 0.02% — реалистично для liquid spot pairs
+      spreadPct:    0.5,
+      impactK:      5,
+      impactRefQty: 1,
+    },
   },
   notifications: {
     alertSound:   true,
