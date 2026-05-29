@@ -107,6 +107,44 @@ export function ChartPane({
     chart.applyOptions({ crosshair: { mode } });
   }, [selectedDrawing, disableMagnetOnSelection]);
 
+  // Click on empty chart area while in cursor mode → open Order popup.
+  // We use chart.subscribeClick (lightweight-charts native) because the SVG
+  // overlay has pointer-events: none in cursor mode (to let pan/zoom through),
+  // so a React-level click handler never fires there.
+  useEffect(() => {
+    if (chartReady <= 0) return;
+    const chart    = chartRef.current;
+    const series   = candleSeriesRef.current;
+    const container = containerRef.current;
+    if (!chart || !series || !container || !symbol) return;
+
+    const handler = (param: import("lightweight-charts").MouseEventParams) => {
+      // Only act in cursor mode; drawing tools handle their own clicks.
+      if (activeTool !== "cursor") return;
+      // If a drawing is selected, this click was used for deselection — don't open popup.
+      if (selectedDrawing) return;
+      if (!param.point) return;
+      const price = series.coordinateToPrice(param.point.y);
+      if (price === null || price === undefined || price <= 0) return;
+      const last = useStore.getState().tickers[symbol]?.lastPrice;
+      if (!last) return;
+      const side: "buy" | "sell" = price > last ? "sell" : "buy";
+      // Convert canvas-space click point to viewport coordinates for popup anchor.
+      const rect = container.getBoundingClientRect();
+      const anchor = { x: rect.left + param.point.x, y: rect.top + param.point.y };
+      openOrderPopup({
+        symbol,
+        side,
+        type: "limit",
+        price: +price,
+        qty: lastUsedQty > 0 ? lastUsedQty : undefined,
+      }, anchor);
+    };
+
+    chart.subscribeClick(handler);
+    return () => { chart.unsubscribeClick(handler); };
+  }, [chartReady, activeTool, selectedDrawing, symbol, openOrderPopup, lastUsedQty]);
+
   // Track whether we need the pane chart
   const hasPaneIndicators = indicators.some((ind) => {
     const def = getIndicatorDef(ind.kind);
@@ -551,21 +589,6 @@ export function ChartPane({
             onDelete={(id) => onRemoveDrawing?.(id)}
             onEdit={(id) => setEditingDrawing(id)}
             onToolDone={() => onToolDone?.()}
-            onCanvasClick={(price, anchor) => {
-              // Click above last price → Sell Limit; below → Buy Limit.
-              // Uses the latest ticker for `symbol` straight from the store.
-              if (!symbol) return;
-              const last = useStore.getState().tickers[symbol]?.lastPrice;
-              if (!last || price <= 0) return;
-              const side: "buy" | "sell" = price > last ? "sell" : "buy";
-              openOrderPopup({
-                symbol,
-                side,
-                type: "limit",
-                price,
-                qty: lastUsedQty > 0 ? lastUsedQty : undefined,
-              }, anchor);
-            }}
           />
         )}
       </div>

@@ -22,9 +22,6 @@ interface Props {
   onDelete?:   (id: string) => void;
   onToolDone?: () => void;
   onEdit?:     (id: string) => void;    // opens params dialog
-  /** Click on empty chart area while in cursor mode, with NO drawing selected.
-   *  Receives the price at the click and screen-space anchor for popups. */
-  onCanvasClick?: (price: number, anchor: { x: number; y: number }) => void;
 }
 
 const HIT_DISTANCE = 6;
@@ -116,7 +113,7 @@ function reduce(state: OverlayState, action: OverlayAction): OverlayState {
 
 export function SvgDrawingOverlay({
   chart, series, candles, drawings, activeTool, selectedId, defaultColor,
-  onCreate, onSelect, onUpdate, onDelete, onToolDone, onEdit, onCanvasClick,
+  onCreate, onSelect, onUpdate, onDelete, onToolDone, onEdit,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [, force] = useReducer((x: number) => x + 1, 0);
@@ -258,14 +255,8 @@ export function SvgDrawingOverlay({
   // ─── pointer handlers on the overlay (for create + clicks on empty space) ───
   const onPointerDown = (e: React.PointerEvent) => {
     if (activeTool === "cursor") {
-      if (selectedId) {
-        // Click on empty space deselects the current drawing (don't trigger order popup).
-        onSelect(null);
-      } else if (onCanvasClick && e.button === 0) {
-        // No drawing was selected — treat as a "place order at this price" gesture.
-        const p = getPoint(e.clientX, e.clientY, false);
-        if (p) onCanvasClick(p.price, { x: e.clientX, y: e.clientY });
-      }
+      // click on empty space deselects
+      onSelect(null);
       return;
     }
     const p = getPoint(e.clientX, e.clientY);
