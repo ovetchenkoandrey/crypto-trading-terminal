@@ -74,7 +74,8 @@ export function OrderBook() {
       return;
     }
 
-    // Normal click → open popup anchored to the row, prefilled as Limit @ that price.
+    // Normal click → open popup anchored to the LEFT edge of the row, so it lays out
+    // to the left of the orderbook over the chart area instead of covering the book itself.
     const row = e.currentTarget as HTMLElement;
     const rect = row.getBoundingClientRect();
     openPopup(
@@ -86,7 +87,7 @@ export function OrderBook() {
         qty: lastUsedQty > 0 ? lastUsedQty : undefined,
         advanced: e.detail >= 2,   // double-click opens advanced
       },
-      { x: rect.right - 4, y: rect.top + rect.height / 2 },
+      { x: rect.left, y: rect.top + rect.height / 2 },
     );
   }
 

@@ -82,8 +82,12 @@ function PopupBody({ popup, close, setLastQty, tickers, paperBalance, feeRate, s
   const slipUsdt  = Math.abs(expectedFill - (refPrice || lastPrice)) * qtyBase;
 
   // ─── position & anchor on screen ───────────────────────────────────
-  const [pos, setPos] = useState<{ left: number; top: number; arrowTop: number | null }>({
-    left: -9999, top: -9999, arrowTop: null,
+  // For anchored mode we prefer to lay out to the LEFT of the anchor (the anchor
+  // being the left edge of the orderbook row, so this puts the popup over the
+  // chart area, never covering the book). Only fall back to the right if there's
+  // not enough room on the left.
+  const [pos, setPos] = useState<{ left: number; top: number; arrowTop: number | null; arrowSide: "left" | "right" }>({
+    left: -9999, top: -9999, arrowTop: null, arrowSide: "right",
   });
   useLayoutEffect(() => {
     const el = ref.current;
@@ -95,23 +99,29 @@ function PopupBody({ popup, close, setLastQty, tickers, paperBalance, feeRate, s
     let left: number;
     let top: number;
     let arrowTop: number | null = null;
+    let arrowSide: "left" | "right" = "right";   // which side of the popup the arrow points from
     if (popup.anchor) {
-      // anchored: place to the right of the anchor; if not enough room — to the left
-      left = popup.anchor.x + 14;
-      if (left + POPUP_WIDTH + POPUP_MARGIN > ww) {
-        left = popup.anchor.x - POPUP_WIDTH - 14;
+      // First try left-of-anchor (arrow on the right of the popup, pointing right)
+      const leftCandidate = popup.anchor.x - POPUP_WIDTH - 14;
+      if (leftCandidate >= POPUP_MARGIN) {
+        left = leftCandidate;
+        arrowSide = "right";
+      } else {
+        left = popup.anchor.x + 14;
+        if (left + POPUP_WIDTH + POPUP_MARGIN > ww) {
+          left = Math.max(POPUP_MARGIN, ww - POPUP_WIDTH - POPUP_MARGIN);
+        }
+        arrowSide = "left";
       }
-      // Try to keep arrow tip near anchor.y. Shift popup vertically to fit.
       top = popup.anchor.y - 18;
       if (top + h + POPUP_MARGIN > wh) top = wh - h - POPUP_MARGIN;
       if (top < POPUP_MARGIN) top = POPUP_MARGIN;
       arrowTop = Math.max(8, Math.min(h - 16, popup.anchor.y - top));
     } else {
-      // centred
       left = Math.max(POPUP_MARGIN, (ww - POPUP_WIDTH) / 2);
       top  = Math.max(POPUP_MARGIN, (wh - h) / 2);
     }
-    setPos({ left, top, arrowTop });
+    setPos({ left, top, arrowTop, arrowSide });
   }, [popup.anchor, advanced]);
 
   // ─── focus + autoclose timer ────────────────────────────────────────
@@ -211,7 +221,8 @@ function PopupBody({ popup, close, setLastQty, tickers, paperBalance, feeRate, s
   return (
     <div
       ref={ref}
-      className={"order-popup" + (popup.anchor ? " anchored" : " centered")}
+      className={"order-popup" + (popup.anchor ? " anchored" : " centered") +
+                 (popup.anchor ? (pos.arrowSide === "right" ? " arrow-right" : " arrow-left") : "")}
       style={{ left: pos.left, top: pos.top, width: POPUP_WIDTH }}
       onKeyDown={onKey}
       data-order-popup
