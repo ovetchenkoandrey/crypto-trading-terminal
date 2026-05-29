@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "../lib/store";
 import { fmtPrice, fmtUsdt } from "../lib/format";
 import { getPricePrecision } from "../lib/symbols";
+import { venue } from "../lib/execution/router";
+import { logWarn } from "../lib/eventBus";
 
 type TabKey = "positions" | "orders" | "history" | "alerts" | "journal";
 
@@ -59,13 +61,18 @@ function PositionsTable() {
   const positions = useStore((s) => s.paperPositions);
   const tickers   = useStore((s) => s.tickers);
   if (positions.length === 0) return <EmptyPlaceholder label="Открытых позиций нет" />;
+  const closePosition = (id: string, symbol: string) => {
+    if (!window.confirm(`Закрыть позицию ${symbol} по рынку?`)) return;
+    try { venue.closePosition(id); }
+    catch (err) { logWarn("position", `не удалось закрыть: ${String(err)}`); }
+  };
   return (
     <table className="term-table">
       <thead>
         <tr>
           <th>Открыта</th><th>Символ</th><th>Сторона</th>
           <th>Объём</th><th>Цена входа</th><th>Текущая</th>
-          <th>P/L, $</th><th>P/L, %</th><th>Бот</th>
+          <th>P/L, $</th><th>P/L, %</th><th>Бот</th><th></th>
         </tr>
       </thead>
       <tbody>
@@ -87,6 +94,11 @@ function PositionsTable() {
               <td className={cls}>{pnl >= 0 ? "+" : ""}{fmtUsdt(pnl)}</td>
               <td className={cls}>{pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%</td>
               <td style={{ color: "var(--fg-dim)" }}>{p.botId ?? "—"}</td>
+              <td>
+                <button className="row-action danger"
+                        onClick={() => closePosition(p.id, p.symbol)}
+                        title="Закрыть по рынку">✕ Закрыть</button>
+              </td>
             </tr>
           );
         })}
@@ -99,12 +111,16 @@ function OrdersTable() {
   const allOrders = useStore((s) => s.paperOrders);
   const orders = useMemo(() => allOrders.filter((o) => o.status === "pending"), [allOrders]);
   if (orders.length === 0) return <EmptyPlaceholder label="Активных ордеров нет" />;
+  const cancel = (id: string) => {
+    try { venue.cancelOrder(id, "user"); }
+    catch (err) { logWarn("order", `не удалось отменить: ${String(err)}`); }
+  };
   return (
     <table className="term-table">
       <thead>
         <tr>
           <th>Время</th><th>Символ</th><th>Тип</th>
-          <th>Сторона</th><th>Цена</th><th>Объём</th><th>Бот</th>
+          <th>Сторона</th><th>Цена</th><th>Объём</th><th>Бот</th><th></th>
         </tr>
       </thead>
       <tbody>
@@ -117,6 +133,11 @@ function OrdersTable() {
             <td>{fmtPrice(o.price, getPricePrecision(o.symbol, o.price))}</td>
             <td>{o.qty}</td>
             <td style={{ color: "var(--fg-dim)" }}>{o.botId ?? "—"}</td>
+            <td>
+              <button className="row-action danger"
+                      onClick={() => cancel(o.id)}
+                      title="Отменить ордер">✕ Отменить</button>
+            </td>
           </tr>
         ))}
       </tbody>

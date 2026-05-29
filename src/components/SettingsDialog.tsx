@@ -49,12 +49,13 @@ export function SettingsDialog({ onClose }: Props) {
   };
 
   return (
-    <Modal title="⚙ Настройки" onClose={onClose} width={920}>
+    <Modal title="⚙ Настройки" onClose={onClose} width={920} testId="settings-modal">
       <div className="settings-body">
 
         <div className="settings-tabs">
           {TABS.map((t) => (
             <div key={t.key}
+                 data-testid={`settings-tab-${t.key}`}
                  className={"settings-tab" + (tab === t.key ? " active" : "")}
                  onClick={() => setTab(t.key)}>
               <span className="ico">{t.icon}</span>{t.label}
@@ -78,10 +79,10 @@ export function SettingsDialog({ onClose }: Props) {
       </div>
 
       <div className="settings-foot">
-        <button className="btn danger" onClick={reset}>Сбросить всё</button>
+        <button className="btn danger" data-testid="settings-reset" onClick={reset}>Сбросить всё</button>
         <div className="spacer" />
-        <button className="btn" onClick={onClose}>Отмена</button>
-        <button className="btn primary" disabled={!dirty} onClick={apply}>
+        <button className="btn" data-testid="settings-cancel" onClick={onClose}>Отмена</button>
+        <button className="btn primary" data-testid="settings-apply" disabled={!dirty} onClick={apply}>
           {dirty ? "Применить" : "Без изменений"}
         </button>
       </div>
@@ -378,6 +379,8 @@ function PaperTab({ draft, setDraft }: DraftProps) {
         )}
       </Section>
 
+      <DangerousShortcutsSection draft={draft} setDraft={setDraft} />
+
       <Section title="Опасная зона">
         <div className="settings-danger-zone">
           <h3>Сбросить аккаунт</h3>
@@ -388,6 +391,25 @@ function PaperTab({ draft, setDraft }: DraftProps) {
         </div>
       </Section>
     </>
+  );
+}
+
+function DangerousShortcutsSection({ draft, setDraft }: DraftProps) {
+  const d = draft.dangerous ?? DEFAULT_SETTINGS.dangerous;
+  const upd = (patch: Partial<typeof d>) =>
+    setDraft((s) => ({ ...s, dangerous: { ...(s.dangerous ?? DEFAULT_SETTINGS.dangerous), ...patch } }));
+  return (
+    <Section title="⚡ Опасные шорткаты"
+             hint="Жесты, отправляющие ордер без подтверждения. По умолчанию выключены. Когда включены — видно бейдж в Status Bar и упоминание жеста в tooltip строки стакана.">
+      <Field label="⇧ + клик в стакане = market"
+             hint="Сторона: bid→Sell, ask→Buy. Объём: последний из popup'а, либо 0.001. Первое срабатывание — учебный confirm.">
+        <Toggle value={d.shiftClickOrderbook} onChange={(v) => upd({ shiftClickOrderbook: v })} />
+      </Field>
+      <Field label="Клавиши B / S = quick market"
+             hint="Открывает popup с Market + фокусом на qty. Один Enter подтверждает.">
+        <Toggle value={d.quickBuySellKeys} onChange={(v) => upd({ quickBuySellKeys: v })} />
+      </Field>
+    </Section>
   );
 }
 

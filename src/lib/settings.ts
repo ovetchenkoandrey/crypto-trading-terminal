@@ -53,6 +53,13 @@ export interface PaperTradingSettings {
   feeRate:           number;       // 0.001 = 0.1%
   pnlMode:           PnlMode;
   slippage:          SlippageSettings;
+  confirmThresholdLow:  number;    // < this → no confirm (USDT). Set 0 to always confirm.
+  confirmThresholdHigh: number;    // ≥ this → modal confirm. Between low and high → undo toast.
+}
+
+export interface DangerousShortcutsSettings {
+  shiftClickOrderbook: boolean;    // ⇧+click on orderbook row → instant market
+  quickBuySellKeys:    boolean;    // B / S → open popup with market & focused qty
 }
 
 export interface NotificationSettings {
@@ -84,6 +91,7 @@ export interface Settings {
   indicators:   IndicatorDefaults;
   drawings:     DrawingSettings;
   paperTrading: PaperTradingSettings;
+  dangerous:    DangerousShortcutsSettings;
   notifications:NotificationSettings;
   network:      NetworkSettings;
   historyDb:    HistoryDbSettings;
@@ -129,6 +137,12 @@ export const DEFAULT_SETTINGS: Settings = {
       impactK:      5,
       impactRefQty: 1,
     },
+    confirmThresholdLow:  100,
+    confirmThresholdHigh: 1000,
+  },
+  dangerous: {
+    shiftClickOrderbook: false,
+    quickBuySellKeys:    false,
   },
   notifications: {
     alertSound:   true,

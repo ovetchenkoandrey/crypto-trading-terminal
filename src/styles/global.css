@@ -1126,3 +1126,221 @@ button { font-family: inherit; }
 .venue-badge.venue-demo     { background: rgba(240, 185, 11, 0.18); color: #f0b90b; }
 .venue-badge.venue-live     { background: rgba(220, 60, 60, 0.18);  color: #dc3c3c; }
 .venue-badge.venue-backtest { background: rgba(70, 140, 240, 0.18); color: #468cf0; }
+
+/* ───────────── order popup ───────────── */
+.order-popup {
+  position: fixed;
+  z-index: 1000;
+  background: var(--bg-panel);
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.7), 0 0 0 1px rgba(240,185,11,0.15);
+  font-size: 12px;
+  color: var(--fg);
+  user-select: none;
+}
+.order-popup-arrow {
+  position: absolute;
+  left: -8px;
+  width: 0; height: 0;
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  border-right: 8px solid var(--accent);
+}
+.order-popup.anchored.left .order-popup-arrow { left: auto; right: -8px;
+  border-right: 0; border-left: 8px solid var(--accent); }
+.op-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg-input);
+  border-bottom: 1px solid var(--border);
+  border-top-left-radius: 5px; border-top-right-radius: 5px;
+}
+.op-sym { flex: 1; font-weight: 600; font-size: 12px; }
+.op-sym .dim { color: var(--fg-mute); font-weight: 400; font-size: 10px; margin-left: 2px; }
+.op-px  { color: var(--fg-dim); font-variant-numeric: tabular-nums; font-size: 11px; }
+.op-close {
+  color: var(--fg-mute); cursor: pointer;
+  font-size: 13px; line-height: 1;
+}
+.op-close:hover { color: var(--fg); }
+
+.op-body { padding: 10px; }
+
+.op-side-strip { display: flex; gap: 4px; margin-bottom: 8px; }
+.op-side-strip button {
+  flex: 1;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--fg-dim);
+  padding: 5px 0;
+  border-radius: 3px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+.op-side-strip button:hover { background: var(--bg-hover); color: var(--fg); }
+.op-side-strip button.buy.active  { background: var(--green); color: #fff; border-color: var(--green); }
+.op-side-strip button.sell.active { background: var(--red);   color: #fff; border-color: var(--red); }
+
+.op-type-seg {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: 3px; overflow: hidden; margin-bottom: 8px;
+}
+.op-type-seg button {
+  background: transparent; color: var(--fg-dim); border: 0;
+  padding: 4px 0; cursor: pointer; font: inherit; font-size: 11px;
+  border-right: 1px solid var(--border);
+}
+.op-type-seg button:last-child { border-right: 0; }
+.op-type-seg button.active {
+  background: var(--accent-soft); color: var(--accent); font-weight: 600;
+}
+
+.op-field { margin-bottom: 8px; }
+.op-row-label {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 10px; color: var(--fg-mute); text-transform: uppercase;
+  letter-spacing: 0.4px; margin-bottom: 3px;
+}
+.op-row-label .ccy {
+  cursor: pointer; color: var(--fg-dim);
+  background: var(--bg-input); padding: 0 5px; border-radius: 2px;
+  border: 1px solid var(--border);
+  text-transform: uppercase; font-size: 9px;
+}
+.op-row-label .ccy:hover { color: var(--fg); border-color: var(--accent); }
+
+.order-popup input {
+  width: 100%;
+  background: var(--bg-input); border: 1px solid var(--border);
+  color: var(--fg); padding: 5px 7px; border-radius: 3px;
+  font: inherit; font-variant-numeric: tabular-nums; font-size: 12px;
+}
+.order-popup input:focus { outline: none; border-color: var(--accent); }
+.order-popup input.qty-active { border-color: var(--accent); background: rgba(240,185,11,0.06); }
+
+.op-qty-quick {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; margin-top: 5px;
+}
+.op-qty-quick button {
+  background: var(--bg-input); border: 1px solid var(--border); color: var(--fg-dim);
+  padding: 3px 0; border-radius: 3px; cursor: pointer; font-size: 10px;
+}
+.op-qty-quick button:hover { background: var(--bg-hover); color: var(--fg); }
+
+.op-advanced {
+  border-top: 1px dashed var(--border);
+  padding-top: 8px;
+  margin-top: 2px;
+}
+.op-tp-sl-note {
+  font-size: 10px;
+  color: var(--fg-mute);
+  background: var(--bg-input);
+  padding: 5px 7px;
+  border-radius: 3px;
+  margin-top: 4px;
+  line-height: 1.5;
+}
+.op-tp-sl-note .dim { color: var(--accent); }
+
+.op-est {
+  font-size: 10px; color: var(--fg-dim);
+  background: var(--bg-input); padding: 5px 7px; border-radius: 3px;
+  margin: 6px 0;
+  font-variant-numeric: tabular-nums; line-height: 1.55;
+}
+.op-est b { color: var(--fg); font-weight: 500; }
+
+.op-submit {
+  width: 100%; padding: 8px; font-weight: 600;
+  border: 0; border-radius: 3px;
+  font-size: 12px; letter-spacing: 0.5px; margin-top: 2px;
+  text-transform: uppercase;
+}
+
+.op-advanced-toggle {
+  display: block; width: 100%;
+  background: transparent; border: 0;
+  color: var(--fg-dim); font-size: 11px; cursor: pointer;
+  padding: 6px 0;
+  border-top: 1px dashed var(--border);
+  margin-top: 8px;
+  text-align: center;
+}
+.op-advanced-toggle:hover { color: var(--fg); }
+.op-advanced-toggle .chev { margin-right: 4px; color: var(--accent); }
+
+.op-foot {
+  background: var(--bg-input);
+  padding: 4px 10px;
+  border-top: 1px solid var(--border);
+  font-size: 10px; color: var(--fg-mute);
+  text-align: center;
+  border-bottom-left-radius: 5px; border-bottom-right-radius: 5px;
+}
+.op-foot kbd {
+  background: var(--bg-panel); border: 1px solid var(--border);
+  padding: 0 4px; border-radius: 2px; font-size: 9px; color: var(--fg-dim);
+  font-family: ui-monospace, monospace;
+}
+
+/* ───────────── orderbook click hints ───────────── */
+.ob-subhint {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  padding: 4px 10px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+  color: var(--fg-mute);
+}
+.ob-subhint kbd {
+  background: var(--bg-input); border: 1px solid var(--border);
+  padding: 0 4px; border-radius: 2px; font-size: 9px;
+  color: var(--fg-dim); font-family: ui-monospace, monospace;
+}
+.ob-subhint .lim { color: var(--fg-dim); }
+.ob-subhint .mkt { color: var(--accent); font-weight: 600; }
+.ob-row { cursor: pointer; }
+
+/* ───────────── toolbar order button ───────────── */
+.btn-order {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+  padding: 4px 10px;
+}
+.btn-order:hover { background: var(--accent); color: #000; }
+
+/* ───────────── shift-click badge ───────────── */
+.shift-badge {
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(240,185,11,0.12); color: var(--accent);
+  font-size: 11px;
+  cursor: help;
+}
+.shift-badge.live {
+  background: rgba(220,60,60,0.18); color: #dc3c3c;
+}
+
+/* ───────────── terminal row actions ───────────── */
+.row-action {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--fg-dim);
+  padding: 2px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+.row-action:hover { background: var(--bg-hover); color: var(--fg); }
+.row-action.danger:hover { background: var(--red-soft, rgba(239,83,80,0.15)); color: var(--red); border-color: var(--red); }

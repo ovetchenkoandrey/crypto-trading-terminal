@@ -13,6 +13,7 @@ import { loadInstruments } from "../lib/instruments";
 import { logInfo } from "../lib/eventBus";
 import { venue } from "../lib/execution/router";
 import { botManager } from "../lib/bots/manager";
+import { OrderPopup } from "./order/OrderPopup";
 
 const SHORTCUTS: Record<string, PanelKey> = {
   d: "orderBook",
@@ -92,6 +93,39 @@ export function MainWindow() {
     return () => window.removeEventListener("keydown", onKey);
   }, [togglePanel, setTheme]);
 
+  // F9 → open Order popup centred; B/S → open with Market + side + qty-focused
+  // (only when the "quick keys" dangerous shortcut is enabled).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Don't hijack typing into inputs / textareas.
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+      const st = useStore.getState();
+      const sym  = st.activeSymbol;
+      const qty  = st.lastUsedQty > 0 ? st.lastUsedQty : undefined;
+
+      if (e.key === "F9") {
+        e.preventDefault();
+        st.openOrderPopup({ symbol: sym, type: "market", qty }, null);
+        return;
+      }
+      if (st.settings.dangerous.quickBuySellKeys) {
+        const k = e.key.toLowerCase();
+        if (k === "b") {
+          e.preventDefault();
+          st.openOrderPopup({ symbol: sym, side: "buy",  type: "market", qty, focusQty: true }, null);
+        } else if (k === "s") {
+          e.preventDefault();
+          st.openOrderPopup({ symbol: sym, side: "sell", type: "market", qty, focusQty: true }, null);
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <div className="app">
       <MenuBar />
@@ -118,6 +152,7 @@ export function MainWindow() {
       {panels.terminal && <Terminal />}
 
       <StatusBar />
+      <OrderPopup />
     </div>
   );
 }

@@ -19,6 +19,7 @@ export function StatusBar() {
   const tickers      = useStore((s) => s.tickers);
   const paperBalance = useStore((s) => s.paperBalance);
   const venueMode    = useStore((s) => s.venueMode);
+  const dangerous    = useStore((s) => s.settings.dangerous);
   const ticker = tickers[activeSymbol];
   const precision = getPricePrecision(activeSymbol, ticker?.lastPrice);
 
@@ -37,6 +38,15 @@ export function StatusBar() {
       <span>Latency: {connection.latencyMs !== null ? `${connection.latencyMs} ms` : "— ms"}</span>
       <span className="sep-dot">·</span>
       <span className={`venue-badge venue-${venueMode}`} title="Активный режим исполнения">{venueLabel(venueMode)}</span>
+      {dangerous.shiftClickOrderbook && (
+        <>
+          <span className="sep-dot">·</span>
+          <span className={`shift-badge${venueMode === "live" ? " live" : ""}`}
+                title="⚡ Shift+клик в стакане отправляет market без подтверждения. Клик → Settings.">
+            ⚡ shift-click
+          </span>
+        </>
+      )}
       <span className="sep-dot">·</span>
       <span>Баланс: {fmtUsdt(paperBalance)} USDT</span>
       {ticker && (

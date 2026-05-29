@@ -134,6 +134,27 @@ interface PersistedSlice {
   paperHistory: PaperTrade[];
   botConfigs: BotConfig[];
   venueMode: VenueMode;            // which execution backend is active app-wide
+  firstShiftClickToastShown: boolean; // training confirm on the very first ⇧+click after enabling
+  lastUsedQty: number;             // remembered qty for quick reuse (B/S keys, shift-click)
+}
+
+/**
+ * Volatile (in-memory only) state for the Order popup.
+ * `anchor` is the screen-space point near which the popup should appear; if null,
+ * the popup is centred over the active chart cell.
+ */
+export interface OrderPopupState {
+  open:    boolean;
+  anchor:  { x: number; y: number } | null;
+  defaults: {
+    symbol:    string;
+    side?:     Side;            // undefined → user must choose
+    type:      OrderType;
+    price?:    number;          // undefined for market
+    qty?:      number;          // undefined → empty input
+    advanced?: boolean;         // open with advanced section expanded
+    focusQty?: boolean;         // focus + select qty input on mount (for B/S quick keys)
+  };
 }
 
 interface VolatileSlice {
@@ -143,6 +164,7 @@ interface VolatileSlice {
   journal: JournalEntry[];
   connection: ConnectionState;
   allSymbols: SymbolMeta[];          // loaded from Bybit on startup (spot + linear)
+  orderPopup: OrderPopupState;
 }
 
 interface Actions {
@@ -190,6 +212,11 @@ interface Actions {
   resetSettings: () => void;
 
   setVenueMode: (mode: VenueMode) => void;
+
+  openOrderPopup: (defaults: OrderPopupState["defaults"], anchor?: { x: number; y: number } | null) => void;
+  closeOrderPopup: () => void;
+  setLastUsedQty: (qty: number) => void;
+  markFirstShiftClickToastShown: () => void;
 }
 
 // minimal recursive partial for settings updates
@@ -218,6 +245,8 @@ const DEFAULT_PERSISTED: PersistedSlice = {
   paperHistory: [],
   botConfigs: [],
   venueMode: "paper",
+  firstShiftClickToastShown: false,
+  lastUsedQty: 0,
   settings: DEFAULT_SETTINGS,
 };
 
@@ -246,6 +275,7 @@ const DEFAULT_VOLATILE: VolatileSlice = {
   journal: [],
   connection: { connected: false, latencyMs: null },
   allSymbols: DEFAULT_SYMBOLS,        // fallback until REST loads the full list
+  orderPopup: { open: false, anchor: null, defaults: { symbol: "BTCUSDT", type: "market" } },
 };
 
 function sortLevels(side: "asks" | "bids", levels: OrderbookLevel[]): OrderbookLevel[] {
@@ -424,6 +454,15 @@ export const useStore = create<Store>()(
       resetSettings: () => set({ settings: DEFAULT_SETTINGS }),
 
       setVenueMode: (mode) => set({ venueMode: mode }),
+
+      openOrderPopup: (defaults, anchor) => set({
+        orderPopup: { open: true, anchor: anchor ?? null, defaults },
+      }),
+      closeOrderPopup: () => set((s) => ({
+        orderPopup: { ...s.orderPopup, open: false },
+      })),
+      setLastUsedQty: (qty) => set({ lastUsedQty: qty }),
+      markFirstShiftClickToastShown: () => set({ firstShiftClickToastShown: true }),
     }),
     {
       name: "trading-app-store",
@@ -445,6 +484,8 @@ export const useStore = create<Store>()(
         paperHistory: state.paperHistory,
         botConfigs: state.botConfigs,
         venueMode: state.venueMode,
+        firstShiftClickToastShown: state.firstShiftClickToastShown,
+        lastUsedQty: state.lastUsedQty,
       }),
       version: 1,
       // Default Zustand persist does a shallow merge — that drops any newly-added

@@ -1,0 +1,745 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<title>Order Popup — mockup v2</title>
+<style>
+  :root {
+    --bg-base:    #0e1116;
+    --bg-panel:   #14181e;
+    --bg-input:   #1a1f27;
+    --bg-hover:   #1f252e;
+    --border:     #232a34;
+    --fg:         #d8dee8;
+    --fg-dim:     #8a96a6;
+    --fg-mute:    #5a6573;
+    --accent:     #f0b90b;
+    --accent-soft:rgba(240,185,11,0.18);
+    --green:      #26a69a;
+    --green-soft: rgba(38,166,154,0.15);
+    --red:        #ef5350;
+    --red-soft:   rgba(239,83,80,0.15);
+    --blue:       #468cf0;
+    --warn:       #f0b90b;
+    --warn-soft:  rgba(240,185,11,0.12);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg-base); color: var(--fg);
+    font: 12px/1.4 ui-sans-serif, system-ui, sans-serif; }
+  body { padding: 20px 28px; }
+
+  h2.section { font-size: 14px; color: var(--fg); margin: 32px 0 10px; font-weight: 600; }
+  h2.section .badge { display:inline-block; background: var(--accent-soft); color: var(--accent);
+    padding: 2px 8px; border-radius: 3px; font-size: 11px; margin-left: 8px; vertical-align: middle; }
+  .note { color: var(--fg-dim); font-size: 11px; margin-top: -4px; margin-bottom: 12px; }
+
+  .mute  { color: var(--fg-mute); }
+  .dim   { color: var(--fg-dim); }
+  .green { color: var(--green); }
+  .red   { color: var(--red); }
+  .accent{ color: var(--accent); }
+
+  .panel { background: var(--bg-panel); border: 1px solid var(--border);
+    border-radius: 3px; overflow: hidden; }
+  .panel-head { background: var(--bg-input); border-bottom: 1px solid var(--border);
+    padding: 6px 10px; font-size: 11px; color: var(--fg-dim);
+    letter-spacing: 0.5px; text-transform: uppercase;
+    display: flex; align-items: center; justify-content: space-between; }
+  .panel-head .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+    display: inline-block; margin-right: 6px; }
+  .panel-sub-hint {
+    font-size: 10px; color: var(--fg-mute); padding: 4px 10px;
+    background: var(--bg-panel); border-bottom: 1px solid var(--border);
+    font-variant-numeric: tabular-nums;
+  }
+  .panel-sub-hint kbd { background: var(--bg-input); border: 1px solid var(--border);
+    padding: 0 4px; border-radius: 2px; font-size: 9px; color: var(--fg-dim);
+    font-family: ui-monospace, monospace; }
+
+  /* ─── orderbook ─── */
+  .ob { font-variant-numeric: tabular-nums; width: 280px; position: relative; }
+  .ob-cols { display: grid; grid-template-columns: 1fr 70px 80px;
+    background: var(--bg-input); color: var(--fg-mute); font-size: 10px;
+    padding: 4px 10px; text-transform: uppercase; letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border); }
+  .ob-row { display: grid; grid-template-columns: 1fr 70px 80px;
+    padding: 2px 10px; cursor: pointer; position: relative; }
+  .ob-row:hover { background: var(--bg-hover); }
+  .ob-row .price { font-weight: 500; }
+  .ob-row.ask .price { color: var(--red); }
+  .ob-row.bid .price { color: var(--green); }
+  .ob-row.bid.hover-demo {
+    background: var(--green-soft);
+    box-shadow: inset 2px 0 0 var(--green);
+  }
+  .ob-spread { background: var(--bg-base); padding: 6px 10px; text-align: center;
+    color: var(--fg-dim); font-size: 11px;
+    border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .ob-spread b { color: var(--fg); font-weight: 600; }
+
+  /* tooltip on hover (two variants) */
+  .ob-tooltip {
+    position: absolute; left: calc(100% + 12px); top: 0;
+    background: var(--bg-panel); border: 1px solid var(--green);
+    color: var(--fg); padding: 6px 10px; border-radius: 4px;
+    font-size: 11px; white-space: nowrap; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    pointer-events: none; z-index: 5; min-width: 180px;
+  }
+  .ob-tooltip .row { display: flex; justify-content: space-between; gap: 16px; padding: 2px 0; }
+  .ob-tooltip .row .k { color: var(--fg-dim); }
+  .ob-tooltip .row .v.market { color: var(--warn); }
+  .ob-tooltip .row .v.limit  { color: var(--fg); }
+  .ob-tooltip::before {
+    content: ""; position: absolute; left: -7px; top: 8px;
+    width: 0; height: 0;
+    border-top: 6px solid transparent; border-bottom: 6px solid transparent;
+    border-right: 7px solid var(--green);
+  }
+
+  /* ─── popup ─── */
+  .pop {
+    width: 220px;
+    background: var(--bg-panel);
+    border: 1px solid var(--accent);
+    border-radius: 5px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.7), 0 0 0 1px rgba(240,185,11,0.15);
+    position: relative;
+    overflow: visible;
+  }
+  .pop::before {
+    content: "";
+    position: absolute; left: -8px; top: 14px;
+    width: 0; height: 0;
+    border-top: 7px solid transparent; border-bottom: 7px solid transparent;
+    border-right: 8px solid var(--accent);
+  }
+  .pop-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 10px;
+    background: var(--bg-input);
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+  }
+  .pop-head .sym { font-weight: 600; font-size: 12px; }
+  .pop-head .px  { color: var(--fg-dim); font-variant-numeric: tabular-nums; }
+  .pop-head .x { color: var(--fg-mute); cursor: pointer; font-size: 13px; line-height: 1; padding: 0 0 0 6px; }
+  .pop-body { padding: 10px; }
+
+  .pop .side-strip {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+  .pop .side-strip button {
+    flex: 1;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    padding: 5px 0;
+    border-radius: 3px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+  }
+  .pop .side-strip button.buy.active  { background: var(--green); color: #fff; border-color: var(--green); }
+  .pop .side-strip button.sell.active { background: var(--red);   color: #fff; border-color: var(--red); }
+
+  .pop .type-seg {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    background: var(--bg-input); border: 1px solid var(--border);
+    border-radius: 3px; overflow: hidden; margin-bottom: 8px;
+  }
+  .pop .type-seg button {
+    background: transparent; color: var(--fg-dim); border: 0;
+    padding: 4px 0; cursor: pointer; font: inherit; font-size: 11px;
+    border-right: 1px solid var(--border);
+  }
+  .pop .type-seg button:last-child { border-right: 0; }
+  .pop .type-seg button.active {
+    background: var(--accent-soft); color: var(--accent); font-weight: 600;
+  }
+
+  .pop .row-label {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 10px; color: var(--fg-mute); text-transform: uppercase;
+    letter-spacing: 0.4px; margin-bottom: 3px;
+  }
+  .pop .row-label .ccy {
+    cursor: pointer; color: var(--fg-dim);
+    background: var(--bg-input); padding: 0 5px; border-radius: 2px;
+    border: 1px solid var(--border);
+    text-transform: uppercase; font-size: 9px;
+  }
+  .pop input {
+    width: 100%;
+    background: var(--bg-input); border: 1px solid var(--border);
+    color: var(--fg); padding: 5px 7px; border-radius: 3px;
+    font: inherit; font-variant-numeric: tabular-nums; font-size: 12px;
+  }
+  .pop input:focus { outline: none; border-color: var(--accent); }
+  .pop input.qty-active { border-color: var(--accent); background: rgba(240,185,11,0.06); }
+
+  .pop .qty-quick {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; margin-top: 5px;
+  }
+  .pop .qty-quick button {
+    background: var(--bg-input); border: 1px solid var(--border); color: var(--fg-dim);
+    padding: 3px 0; border-radius: 3px; cursor: pointer; font-size: 10px;
+  }
+  .pop .qty-quick button.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+
+  .pop .field { margin-bottom: 8px; }
+
+  .pop .est {
+    font-size: 10px; color: var(--fg-dim);
+    background: var(--bg-input); padding: 5px 7px; border-radius: 3px;
+    margin-top: 4px; margin-bottom: 8px;
+    font-variant-numeric: tabular-nums; line-height: 1.5;
+  }
+  .pop .est b { color: var(--fg); font-weight: 500; }
+
+  .pop .advanced-toggle {
+    display: block; width: 100%;
+    background: transparent; border: 0;
+    color: var(--fg-dim); font-size: 11px; cursor: pointer;
+    padding: 6px 0;
+    border-top: 1px dashed var(--border);
+    margin-top: 2px;
+    text-align: center;
+  }
+  .pop .advanced-toggle:hover { color: var(--fg); }
+  .pop .advanced-toggle .chev { margin-right: 4px; color: var(--accent); }
+
+  .pop .advanced-body {
+    border-top: 1px dashed var(--border);
+    padding-top: 8px;
+    margin-top: 2px;
+  }
+
+  .pop .submit {
+    width: 100%; padding: 8px; font-weight: 600; border: 0; border-radius: 3px;
+    cursor: pointer; font-size: 12px; letter-spacing: 0.5px; margin-top: 2px;
+    text-transform: uppercase;
+  }
+  .pop .submit.buy  { background: var(--green); color: #fff; }
+  .pop .submit.sell { background: var(--red);   color: #fff; }
+
+  .pop .hint-foot {
+    background: var(--bg-input);
+    padding: 4px 10px;
+    border-top: 1px solid var(--border);
+    font-size: 10px; color: var(--fg-mute);
+    text-align: center;
+    border-bottom-left-radius: 5px; border-bottom-right-radius: 5px;
+  }
+  .pop .hint-foot kbd { background: var(--bg-panel); border: 1px solid var(--border);
+    padding: 0 4px; border-radius: 2px; font-size: 9px; color: var(--fg-dim);
+    font-family: ui-monospace, monospace; }
+
+  /* ─── layout helpers ─── */
+  .demo-row {
+    display: flex; align-items: flex-start; gap: 16px; padding: 16px;
+    background: var(--bg-base); border: 1px solid var(--border); border-radius: 4px;
+  }
+  .demo-row > .caption {
+    width: 200px; flex-shrink: 0; color: var(--fg-dim);
+    font-size: 11px; line-height: 1.5; padding: 6px 0;
+  }
+  .demo-row > .caption b { color: var(--fg); display: block; margin-bottom: 4px; font-weight: 600; }
+
+  /* ─── status bar fake ─── */
+  .statusbar {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    padding: 6px 12px; font-size: 11px; color: var(--fg-dim);
+    border-radius: 3px;
+  }
+  .statusbar .sep { color: var(--fg-mute); }
+  .statusbar .venue-badge {
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: rgba(60,200,90,0.15); color: #3cc85a;
+    font-size: 10px;
+  }
+  .statusbar .shift-badge {
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: var(--warn-soft); color: var(--warn);
+    font-size: 10px;
+    cursor: pointer;
+  }
+  .statusbar .shift-badge.live {
+    background: var(--red-soft); color: var(--red);
+  }
+
+  /* ─── settings preview ─── */
+  .set-preview {
+    background: var(--bg-panel); border: 1px solid var(--border); border-radius: 4px;
+    padding: 16px 20px; max-width: 640px;
+  }
+  .set-preview h3 {
+    font-size: 13px; margin: 0 0 4px; font-weight: 600;
+  }
+  .set-preview .sub { color: var(--fg-dim); font-size: 11px; margin-bottom: 14px; }
+  .set-row {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 14px; padding: 10px 0;
+    border-top: 1px solid var(--border);
+  }
+  .set-row:first-of-type { border-top: 0; }
+  .set-row .lbl { flex: 1; }
+  .set-row .lbl .title { font-weight: 600; margin-bottom: 2px; display: flex; align-items: center; gap: 6px; }
+  .set-row .lbl .desc  { color: var(--fg-dim); font-size: 11px; line-height: 1.55; }
+  .set-row .lbl .warn-pill {
+    display: inline-block; background: var(--warn-soft); color: var(--warn);
+    padding: 1px 6px; border-radius: 3px; font-size: 10px; margin-left: 4px;
+  }
+  .toggle {
+    width: 36px; height: 20px; background: var(--bg-input);
+    border: 1px solid var(--border); border-radius: 10px; position: relative;
+    cursor: pointer; flex-shrink: 0;
+  }
+  .toggle::after {
+    content: ""; position: absolute; width: 14px; height: 14px;
+    background: var(--fg-mute); border-radius: 50%; top: 2px; left: 2px;
+    transition: 0.2s;
+  }
+  .toggle.on { background: var(--accent-soft); border-color: var(--accent); }
+  .toggle.on::after { left: 18px; background: var(--accent); }
+
+  /* ─── confirm toast ─── */
+  .toast {
+    width: 380px; background: var(--bg-panel);
+    border: 1px solid var(--warn); border-left-width: 3px;
+    border-radius: 4px; padding: 12px 14px; font-size: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  }
+  .toast .row1 { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .toast .row1 b { font-size: 13px; }
+  .toast .row2 { color: var(--fg-dim); margin-bottom: 10px; line-height: 1.5; }
+  .toast .row2 .gesture {
+    background: var(--bg-input); padding: 1px 5px; border-radius: 2px;
+    color: var(--fg); font-family: ui-monospace, monospace; font-size: 11px;
+  }
+  .toast .actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .toast button {
+    background: var(--bg-input); border: 1px solid var(--border); color: var(--fg);
+    padding: 5px 12px; border-radius: 3px; cursor: pointer; font: inherit; font-size: 11px;
+  }
+  .toast button.primary { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 600; }
+  .toast button.dim { color: var(--fg-dim); }
+
+  /* ─── toolbar fake ─── */
+  .toolbar-fake {
+    background: var(--bg-panel); border: 1px solid var(--border); border-radius: 3px;
+    padding: 4px 8px; display: flex; gap: 4px; align-items: center; height: 36px;
+  }
+  .toolbar-fake button {
+    background: transparent; border: 1px solid transparent;
+    width: 28px; height: 28px; border-radius: 3px; cursor: pointer;
+    color: var(--fg); display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+  }
+  .toolbar-fake button:hover { background: var(--bg-hover); }
+  .toolbar-fake button.highlight {
+    background: var(--accent-soft); color: var(--accent); border-color: var(--accent);
+    width: auto; padding: 0 10px; font-size: 12px; font-weight: 600; gap: 4px;
+  }
+  .toolbar-fake .sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
+
+  /* tiny F9 popup */
+  .pop.center-f9 {
+    margin: 0 auto;
+  }
+  .pop.center-f9::before { display: none; }
+</style>
+</head>
+<body>
+
+<h2 class="section">1 — Popup рядом с строкой стакана <span class="badge">основной путь: клик по цене</span></h2>
+<div class="note">Стрелка popup'а указывает на ту строку стакана, откуда взялась цена. Заголовок панели стакана содержит постоянную подсказку с активными жестами.</div>
+
+<div class="demo-row">
+  <div class="caption">
+    <b>Свёрнутый popup</b>
+    Минимум полей: side, type, цена, объём, оценка. 220px ширина. Раскрывается по «▾ Расширенно».
+  </div>
+
+  <!-- orderbook with permanent hint in subhead -->
+  <div class="ob panel">
+    <div class="panel-head"><span><span class="dot"></span>СТАКАН · BTCUSDT</span></div>
+    <div class="panel-sub-hint">
+      клик: <span class="dim">limit</span> · <kbd>⇧</kbd>клик: <span class="accent">market</span> · 2× клик: <span class="dim">расширенно</span>
+    </div>
+    <div class="ob-cols"><span>Цена</span><span style="text-align:right">Размер</span><span style="text-align:right">Сумма</span></div>
+    <div class="ob-row ask"><span class="price">73,668.20</span><span style="text-align:right" class="mute">1.205</span><span style="text-align:right" class="mute">88,770</span></div>
+    <div class="ob-row ask"><span class="price">73,667.90</span><span style="text-align:right" class="mute">0.456</span><span style="text-align:right" class="mute">33,599</span></div>
+    <div class="ob-row ask"><span class="price">73,667.40</span><span style="text-align:right" class="mute">2.103</span><span style="text-align:right" class="mute">154,924</span></div>
+    <div class="ob-row ask"><span class="price">73,666.80</span><span style="text-align:right" class="mute">0.378</span><span style="text-align:right" class="mute">27,847</span></div>
+    <div class="ob-spread">spread <b>0.50</b> · <span class="green">↑ 0.06%</span></div>
+    <div class="ob-row bid hover-demo"><span class="price">73,666.30</span><span style="text-align:right" class="mute">1.124</span><span style="text-align:right" class="mute">82,801</span></div>
+    <div class="ob-row bid"><span class="price">73,666.00</span><span style="text-align:right" class="mute">0.582</span><span style="text-align:right" class="mute">42,872</span></div>
+    <div class="ob-row bid"><span class="price">73,665.70</span><span style="text-align:right" class="mute">2.901</span><span style="text-align:right" class="mute">213,605</span></div>
+    <div class="ob-row bid"><span class="price">73,665.40</span><span style="text-align:right" class="mute">0.733</span><span style="text-align:right" class="mute">53,996</span></div>
+    <div class="ob-row bid"><span class="price">73,664.90</span><span style="text-align:right" class="mute">1.456</span><span style="text-align:right" class="mute">107,256</span></div>
+  </div>
+
+  <!-- collapsed popup -->
+  <div class="pop" style="margin-top: 110px;">
+    <div class="pop-head">
+      <span class="sym">BTCUSDT <span class="dim" style="font-size:10px;">· paper</span></span>
+      <span class="px">73,665.70</span>
+      <span class="x">✕</span>
+    </div>
+    <div class="pop-body">
+      <div class="side-strip">
+        <button class="buy">Buy</button>
+        <button class="sell active">Sell</button>
+      </div>
+      <div class="type-seg">
+        <button>Market</button>
+        <button class="active">Limit</button>
+        <button>Stop</button>
+      </div>
+      <div class="field">
+        <div class="row-label"><span>Цена</span></div>
+        <input value="73,666.30" />
+      </div>
+      <div class="field">
+        <div class="row-label"><span>Объём</span><span class="ccy">BTC ▾</span></div>
+        <input value="0.10" class="qty-active" />
+        <div class="qty-quick">
+          <button>25%</button>
+          <button>50%</button>
+          <button>75%</button>
+          <button>100%</button>
+        </div>
+      </div>
+      <div class="est">
+        Сумма: <b>7,366.63 USDT</b><br>
+        Комиссия: <b>7.37 USDT</b> · Slip: <b>0.00</b><br>
+        Свободно: <b>10,000.00 USDT</b>
+      </div>
+      <button class="submit sell">Sell 0.10 BTC</button>
+      <button class="advanced-toggle"><span class="chev">▾</span>Расширенно</button>
+    </div>
+    <div class="hint-foot">
+      <kbd>Enter</kbd> отправить · <kbd>Esc</kbd> отмена
+    </div>
+  </div>
+
+  <!-- expanded popup -->
+  <div class="pop" style="margin-top: 10px;">
+    <div class="pop-head">
+      <span class="sym">BTCUSDT</span>
+      <span class="px">73,665.70</span>
+      <span class="x">✕</span>
+    </div>
+    <div class="pop-body">
+      <div class="side-strip">
+        <button class="buy">Buy</button>
+        <button class="sell active">Sell</button>
+      </div>
+      <div class="type-seg">
+        <button>Market</button>
+        <button class="active">Limit</button>
+        <button>Stop</button>
+      </div>
+      <div class="field">
+        <div class="row-label"><span>Цена</span></div>
+        <input value="73,666.30" />
+      </div>
+      <div class="field">
+        <div class="row-label"><span>Stop price</span></div>
+        <input value="" placeholder="—" />
+      </div>
+      <div class="field">
+        <div class="row-label"><span>Объём</span><span class="ccy">BTC ▾</span></div>
+        <input value="0.10" />
+        <div class="qty-quick">
+          <button>25%</button>
+          <button>50%</button>
+          <button>75%</button>
+          <button>100%</button>
+        </div>
+      </div>
+      <div class="advanced-body">
+        <div class="field">
+          <div class="row-label"><span>Take Profit</span></div>
+          <input value="74,500.00" />
+        </div>
+        <div class="field">
+          <div class="row-label"><span>Stop Loss</span></div>
+          <input value="73,000.00" />
+        </div>
+        <div class="field">
+          <div class="row-label"><span>TIF</span></div>
+          <input value="GTC" />
+        </div>
+        <div class="field">
+          <div class="row-label"><span>Reduce only</span></div>
+          <label style="font-size: 11px; color: var(--fg-dim);"><input type="checkbox"> только закрывает позицию</label>
+        </div>
+      </div>
+      <div class="est">
+        Сумма: <b>7,366.63 USDT</b><br>
+        TP +<span class="green">113.37 USDT</span> · SL −<span class="red">66.63 USDT</span><br>
+        R:R = <b>1.7</b>
+      </div>
+      <button class="submit sell">Sell 0.10 BTC</button>
+      <button class="advanced-toggle"><span class="chev">▴</span>Свернуть</button>
+    </div>
+    <div class="hint-foot">
+      <kbd>Enter</kbd> отправить · <kbd>Esc</kbd> отмена
+    </div>
+  </div>
+
+  <div class="caption" style="width: 180px;">
+    <b>Развёрнутый popup</b>
+    Внутри тот же контейнер, просто высота вырастает. Появляются: Stop price (для Stop), TP, SL, TIF, Reduce only. Внизу — R:R и оценка PnL.
+  </div>
+</div>
+
+<h2 class="section">2 — Tooltip при наведении на строку стакана <span class="badge">показывает оба жеста</span></h2>
+<div class="note">Если Shift+click выключен, вторая строка в tooltip не показывается.</div>
+
+<div class="demo-row">
+  <div class="caption">
+    <b>Shift+click включён</b>
+    Tooltip показывает оба жеста. Цена бида — limit Sell, Shift+click — мгновенный market Sell.
+  </div>
+
+  <div style="position: relative;">
+    <div class="ob panel">
+      <div class="panel-head"><span><span class="dot"></span>СТАКАН · BTCUSDT</span></div>
+      <div class="panel-sub-hint">
+        клик: <span class="dim">limit</span> · <kbd>⇧</kbd>клик: <span class="accent">market</span> · 2× клик: <span class="dim">расширенно</span>
+      </div>
+      <div class="ob-cols"><span>Цена</span><span style="text-align:right">Размер</span><span style="text-align:right">Сумма</span></div>
+      <div class="ob-row ask"><span class="price">73,667.90</span><span style="text-align:right" class="mute">0.456</span><span style="text-align:right" class="mute">33,599</span></div>
+      <div class="ob-row ask"><span class="price">73,667.40</span><span style="text-align:right" class="mute">2.103</span><span style="text-align:right" class="mute">154,924</span></div>
+      <div class="ob-spread">spread <b>0.50</b> · <span class="green">↑ 0.06%</span></div>
+      <div class="ob-row bid hover-demo" style="position: relative;">
+        <span class="price">73,666.30</span><span style="text-align:right" class="mute">1.124</span><span style="text-align:right" class="mute">82,801</span>
+        <div class="ob-tooltip">
+          <div class="row"><span class="k">клик</span><span class="v limit">Limit Sell @ 73,666.30</span></div>
+          <div class="row"><span class="k"><kbd>⇧</kbd>клик</span><span class="v market">Market Sell · 0.10 BTC ⚡</span></div>
+          <div class="row"><span class="k">2× клик</span><span class="v limit">Limit + расширенно</span></div>
+        </div>
+      </div>
+      <div class="ob-row bid"><span class="price">73,666.00</span><span style="text-align:right" class="mute">0.582</span><span style="text-align:right" class="mute">42,872</span></div>
+      <div class="ob-row bid"><span class="price">73,665.40</span><span style="text-align:right" class="mute">0.733</span><span style="text-align:right" class="mute">53,996</span></div>
+    </div>
+  </div>
+
+  <div style="position: relative; margin-left: 220px;">
+    <div class="ob panel">
+      <div class="panel-head"><span><span class="dot"></span>СТАКАН · BTCUSDT</span></div>
+      <div class="panel-sub-hint">
+        клик: <span class="dim">limit</span> · 2× клик: <span class="dim">расширенно</span>
+      </div>
+      <div class="ob-cols"><span>Цена</span><span style="text-align:right">Размер</span><span style="text-align:right">Сумма</span></div>
+      <div class="ob-row ask"><span class="price">73,667.90</span><span style="text-align:right" class="mute">0.456</span><span style="text-align:right" class="mute">33,599</span></div>
+      <div class="ob-row ask"><span class="price">73,667.40</span><span style="text-align:right" class="mute">2.103</span><span style="text-align:right" class="mute">154,924</span></div>
+      <div class="ob-spread">spread <b>0.50</b> · <span class="green">↑ 0.06%</span></div>
+      <div class="ob-row bid hover-demo" style="position: relative;">
+        <span class="price">73,666.30</span><span style="text-align:right" class="mute">1.124</span><span style="text-align:right" class="mute">82,801</span>
+        <div class="ob-tooltip" style="border-color: var(--green);">
+          <div class="row"><span class="k">клик</span><span class="v limit">Limit Sell @ 73,666.30</span></div>
+          <div class="row"><span class="k">2× клик</span><span class="v limit">Limit + расширенно</span></div>
+        </div>
+      </div>
+      <div class="ob-row bid"><span class="price">73,666.00</span><span style="text-align:right" class="mute">0.582</span><span style="text-align:right" class="mute">42,872</span></div>
+      <div class="ob-row bid"><span class="price">73,665.40</span><span style="text-align:right" class="mute">0.733</span><span style="text-align:right" class="mute">53,996</span></div>
+    </div>
+  </div>
+
+  <div class="caption" style="margin-left: 220px;">
+    <b>Shift+click выключен</b>
+    Tooltip не показывает упоминание market — фичу не догадаться использовать «случайно».
+  </div>
+</div>
+
+<h2 class="section">3 — Status Bar с активным шорткатом <span class="badge">постоянное напоминание</span></h2>
+<div class="note">Когда Shift+click включён — справа от venue-бейджа появляется ⚡ shift-click. Клик по бейджу → открывает Settings → Опасные шорткаты. В live режиме бейдж красный.</div>
+
+<div class="statusbar">
+  <span class="green">Bybit · Connected</span><span class="sep">·</span>
+  <span>Latency: 32 ms</span><span class="sep">·</span>
+  <span class="venue-badge">🟢 PAPER</span><span class="sep">·</span>
+  <span class="shift-badge">⚡ shift-click</span><span class="sep">·</span>
+  <span>Баланс: 10,000.00 USDT</span><span class="sep">·</span>
+  <span>BTCUSDT: <span class="green">73,665.70</span></span>
+  <span style="flex: 1;"></span>
+  <span>11:32:14</span>
+</div>
+
+<div class="statusbar" style="margin-top: 8px;">
+  <span class="green">Bybit · Connected</span><span class="sep">·</span>
+  <span>Latency: 32 ms</span><span class="sep">·</span>
+  <span class="venue-badge" style="background: rgba(220,60,60,0.18); color: #dc3c3c;">🔴 LIVE</span><span class="sep">·</span>
+  <span class="shift-badge live">⚡ shift-click</span><span class="sep">·</span>
+  <span>Equity: 1,250.00 USDT</span><span class="sep">·</span>
+  <span>BTCUSDT: <span class="green">73,665.70</span></span>
+  <span style="flex: 1;"></span>
+  <span>11:32:14</span>
+</div>
+
+<h2 class="section">4 — Настройка в Settings → Paper trading → «Опасные шорткаты» <span class="badge">по умолчанию выключено</span></h2>
+
+<div class="set-preview">
+  <h3>⚡ Опасные шорткаты</h3>
+  <div class="sub">Жесты, отправляющие ордер без подтверждения. В live режиме крайне внимательно.</div>
+
+  <div class="set-row">
+    <div class="lbl">
+      <div class="title">Shift+клик в стакане = мгновенный market <span class="warn-pill">опасно</span></div>
+      <div class="desc">
+        Клик с зажатым Shift по строке стакана отправляет market-ордер без открытия формы.
+        Сторона — противоположна типу строки (bid → Sell, ask → Buy). Объём берётся из последней
+        использованной в popup'е цифры, либо 0.001 BTC если ещё не использовалась.
+        <br><br>
+        После включения: видно бейдж <span class="shift-badge" style="font-size: 9px;">⚡ shift-click</span> в Status Bar,
+        в tooltip строки стакана появляется упоминание жеста, при <b>первом</b> срабатывании
+        будет учебный confirm-toast.
+      </div>
+    </div>
+    <div class="toggle"></div>
+  </div>
+
+  <div class="set-row">
+    <div class="lbl">
+      <div class="title">B / S = quick market <span class="warn-pill">опасно</span></div>
+      <div class="desc">
+        Клавиши <kbd style="background: var(--bg-input); border: 1px solid var(--border); padding: 0 4px; border-radius: 2px; font-size: 10px;">B</kbd> и <kbd style="background: var(--bg-input); border: 1px solid var(--border); padding: 0 4px; border-radius: 2px; font-size: 10px;">S</kbd> открывают popup с уже подставленным market-ордером и
+        выделенной qty. Один <kbd style="background: var(--bg-input); border: 1px solid var(--border); padding: 0 4px; border-radius: 2px; font-size: 10px;">Enter</kbd> — и ордер отправлен. Видно что отправляешь, но один лишний нажатый Enter может стоить.
+      </div>
+    </div>
+    <div class="toggle on"></div>
+  </div>
+</div>
+
+<h2 class="section">5 — Учебный toast при первом Shift+click <span class="badge">страховка от «включил и забыл»</span></h2>
+<div class="note">Появляется при первом срабатывании жеста после включения опции. Дальше — без подтверждения, до отключения. Также можно вызвать «Показать справку повторно» из Settings.</div>
+
+<div style="display: flex; gap: 16px;">
+  <div class="toast">
+    <div class="row1"><b>⚡ Включён shift-click</b><span class="dim" style="font-size: 11px;">первый раз</span></div>
+    <div class="row2">
+      Жест <span class="gesture">⇧ + клик</span> по строке стакана отправляет <b>market</b> ордер без подтверждения.
+      Этот раз — confirm. Дальше — сразу.
+      <br><br>
+      Сейчас: <b class="red">Sell 0.10 BTC @ market</b> (~ 7,366 USDT).
+    </div>
+    <div class="actions">
+      <button class="dim">Отключить шорткат</button>
+      <button>Отмена</button>
+      <button class="primary">Отправить</button>
+    </div>
+  </div>
+
+  <div style="flex: 1; padding: 6px 12px; color: var(--fg-dim); font-size: 11px; line-height: 1.7;">
+    <b style="color: var(--fg);">Что страхует пользователя:</b><br>
+    1. Опция выключена по умолчанию — нельзя «случайно нажать Shift и купить» пока сам не включил.<br>
+    2. После включения — постоянный бейдж в Status Bar.<br>
+    3. Tooltip на hover показывает жест в момент когда курсор над строкой.<br>
+    4. <b>Первое</b> срабатывание — учебный toast (вот этот).<br>
+    5. Из toast можно сразу отключить фичу обратно.<br>
+    6. В Settings → «Сбросить кнопки опасных шорткатов» — возвращает все toast'ы заново (если переустановил себя и хочешь снова увидеть подсказку).
+  </div>
+</div>
+
+<h2 class="section">6 — F9 и кнопка «📝 Новый ордер» в тулбаре <span class="badge">путь без клика по стакану</span></h2>
+<div class="note">Открывают тот же popup, но без привязки к строке. Позиционируется в центре активной chart-ячейки, дефолты: Market, активный символ, последний qty. Сторона <b>не выбрана</b> — пользователь явно тыкает Buy или Sell, чтобы избежать случайностей.</div>
+
+<div style="display: flex; gap: 20px; align-items: flex-start;">
+  <div class="toolbar-fake">
+    <button title="Открыть layout">📂</button>
+    <button title="Сохранить layout">💾</button>
+    <span class="sep"></span>
+    <button title="Курсор">↗</button>
+    <button title="Стереть">✎</button>
+    <button title="Скрыть рисунки">🚫</button>
+    <span class="sep"></span>
+    <button>M1</button>
+    <button>M5</button>
+    <button class="highlight" style="background: var(--accent); color: #000;">M15</button>
+    <button>H1</button>
+    <span class="sep"></span>
+    <button title="Индикаторы">𝑓</button>
+    <button title="Автоскролл">▶</button>
+    <span class="sep"></span>
+    <button class="highlight">📝 Новый ордер</button>
+    <span class="sep"></span>
+    <button>+</button><button>📐</button><button>—</button><button>ϕ</button><button>T</button>
+  </div>
+</div>
+
+<div style="margin-top: 16px;" class="demo-row">
+  <div class="caption">
+    <b>F9 / кнопка «Новый ордер»</b>
+    Popup появляется по центру активной chart-ячейки. Сторона не выбрана — пользователь должен явно выбрать Buy/Sell. Type=Market по умолчанию.
+  </div>
+
+  <div style="margin-left: 60px;">
+    <div class="pop center-f9">
+      <div class="pop-head">
+        <span class="sym">BTCUSDT</span>
+        <span class="px">73,665.70</span>
+        <span class="x">✕</span>
+      </div>
+      <div class="pop-body">
+        <div class="side-strip">
+          <button class="buy">Buy</button>
+          <button class="sell">Sell</button>
+        </div>
+        <div class="type-seg">
+          <button class="active">Market</button>
+          <button>Limit</button>
+          <button>Stop</button>
+        </div>
+        <div class="field">
+          <div class="row-label"><span>Объём</span><span class="ccy">BTC ▾</span></div>
+          <input value="" placeholder="0.00" class="qty-active" />
+          <div class="qty-quick">
+            <button>25%</button>
+            <button>50%</button>
+            <button>75%</button>
+            <button>100%</button>
+          </div>
+        </div>
+        <div class="est">
+          Свободно: <b>10,000.00 USDT</b><br>
+          <span class="dim">Заполните объём и выберите сторону</span>
+        </div>
+        <button class="submit" style="background: var(--bg-input); color: var(--fg-mute); cursor: not-allowed;">Выберите Buy / Sell</button>
+        <button class="advanced-toggle"><span class="chev">▾</span>Расширенно</button>
+      </div>
+      <div class="hint-foot">
+        <kbd>Tab</kbd> → объём · <kbd>Enter</kbd> отправить
+      </div>
+    </div>
+  </div>
+
+  <div class="caption" style="margin-left: 80px; width: 240px;">
+    <b>Поведение клавиши B / S</b>
+    Если в Settings включён «B/S quick market», то нажатие открывает тот же popup, но сторона уже выбрана (B → Buy, S → Sell), qty выделена и в фокусе — один Enter подтверждает. Тоже видно что отправляешь, но без лишних движений.
+  </div>
+</div>
+
+<h2 class="section">7 — Как закрывается popup</h2>
+<div class="set-preview">
+  <div class="set-row"><div class="lbl"><div class="title">Esc</div><div class="desc">Закрытие без отправки.</div></div></div>
+  <div class="set-row"><div class="lbl"><div class="title">Клик мимо popup'а</div><div class="desc">Закрытие. Клик по другой строке стакана — закрывает текущий и открывает новый с новой ценой.</div></div></div>
+  <div class="set-row"><div class="lbl"><div class="title">После отправки ордера</div><div class="desc">Автозакрытие. В журнале появляется лог-событие «order placed: ...». Popup можно открыть снова за пару секунд если передумал.</div></div></div>
+  <div class="set-row"><div class="lbl"><div class="title">Через 30 сек бездействия</div><div class="desc">Автозакрытие (настраиваемо). Чтобы не висел случайный popup пока ты переключился на другое окно.</div></div></div>
+</div>
+
+</body>
+</html>

@@ -32,9 +32,12 @@ export function Toolbar() {
   const currentTool    = useStore((s) => s.currentTool);
   const setCurrentTool = useStore((s) => s.setCurrentTool);
   const activeIndex    = useStore((s) => s.activeCellIndex);
+  const activeSymbol   = useStore((s) => s.activeSymbol);
   const activeChartType = useStore((s) => s.mosaicCells[s.activeCellIndex]?.chartType ?? s.settings.chart.defaultChartType);
   const setMosaicCell  = useStore((s) => s.setMosaicCell);
   const addIndicator   = useStore((s) => s.addIndicator);
+  const openOrderPopup = useStore((s) => s.openOrderPopup);
+  const lastUsedQty    = useStore((s) => s.lastUsedQty);
   const [showSettings, setShowSettings] = useState(false);
   const [showIndicatorPicker, setShowIndicatorPicker] = useState(false);
 
@@ -46,16 +49,19 @@ export function Toolbar() {
 
   return (
     <div className="toolbar">
-      <button className="icon-btn" title="Импорт раскладки из JSON" onClick={() => importLayoutFromFile()}>📂</button>
-      <button className="icon-btn" title="Экспорт раскладки в JSON" onClick={() => exportLayout()}>💾</button>
+      <button className="icon-btn" data-testid="layout-import" title="Импорт раскладки из JSON" onClick={() => importLayoutFromFile()}>📂</button>
+      <button className="icon-btn" data-testid="layout-export" title="Экспорт раскладки в JSON" onClick={() => exportLayout()}>💾</button>
       <span className="sep" />
       <button className={"icon-btn" + (activeChartType === "candle" ? " active" : "")}
+              data-testid="chart-type-candle"
               title="Свечи (для активной ячейки)"
               onClick={() => setMosaicCell(activeIndex, { chartType: "candle" })}>🕯</button>
       <button className={"icon-btn" + (activeChartType === "line" ? " active" : "")}
+              data-testid="chart-type-line"
               title="Линия (для активной ячейки)"
               onClick={() => setMosaicCell(activeIndex, { chartType: "line" })}>📈</button>
       <button className={"icon-btn" + (activeChartType === "area" ? " active" : "")}
+              data-testid="chart-type-area"
               title="Область (для активной ячейки)"
               onClick={() => setMosaicCell(activeIndex, { chartType: "area" })}>▰</button>
       <span className="sep" />
@@ -63,6 +69,7 @@ export function Toolbar() {
       {TIMEFRAMES.map((tf) => (
         <button
           key={tf.value}
+          data-testid={`tf-${tf.value}`}
           className={"tf-btn" + (tf.value === timeframe ? " active" : "")}
           onClick={() => setTimeframe(tf.value)}
         >
@@ -74,6 +81,7 @@ export function Toolbar() {
       <div style={{ position: "relative", display: "inline-block" }}>
         <button
           className={"icon-btn" + (showIndicatorPicker ? " active" : "")}
+          data-testid="open-indicator-picker"
           title="Добавить индикатор на активную ячейку"
           onClick={() => setShowIndicatorPicker((v) => !v)}
         >𝑓</button>
@@ -94,18 +102,32 @@ export function Toolbar() {
       </div>
       <button
         className="icon-btn"
+        data-testid="scroll-to-realtime"
         title="Прокрутить к текущему моменту"
         onClick={() => window.dispatchEvent(new CustomEvent("trading-app:scroll-to-realtime"))}
       >⏵</button>
       <span className="sep" />
       <button
+        className="btn btn-order"
+        data-testid="open-order-popup"
+        title="Новый ордер (F9)"
+        onClick={() => openOrderPopup({
+          symbol: activeSymbol,
+          type: "market",
+          qty: lastUsedQty > 0 ? lastUsedQty : undefined,
+        }, null)}
+      >📝 Новый ордер</button>
+      <span className="sep" />
+      <button
         className={"icon-btn" + (currentTool === "cursor" ? " active" : "")}
+        data-testid="tool-cursor"
         title="Курсор / выбор (Esc)"
         onClick={() => setCurrentTool("cursor")}
       >✛</button>
       {TOOL_BTNS.map((t) => (
         <button
           key={t.tool}
+          data-testid={`tool-${t.tool}`}
           className={"icon-btn" + (currentTool === t.tool ? " active" : "")}
           title={t.title}
           onClick={() => setCurrentTool(currentTool === t.tool ? "cursor" : t.tool)}
@@ -118,6 +140,7 @@ export function Toolbar() {
 
       <button
         className="icon-btn"
+        data-testid="theme-toggle"
         title={theme === "dark" ? "Переключить на светлую (Ctrl+J)" : "Переключить на тёмную (Ctrl+J)"}
         onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
       >
@@ -128,6 +151,7 @@ export function Toolbar() {
         {LAYOUTS.map((l) => (
           <button
             key={l.key}
+            data-testid={`layout-${l.key}`}
             className={layout === l.key ? "active" : ""}
             onClick={() => setLayout(l.key)}
           >
@@ -140,6 +164,7 @@ export function Toolbar() {
         {PANEL_BTNS.map((p) => (
           <button
             key={p.key}
+            data-testid={`toggle-panel-${p.key}`}
             className={"icon-btn " + (panels[p.key] ? "on" : "off")}
             title={p.title}
             onClick={() => togglePanel(p.key)}
@@ -149,7 +174,7 @@ export function Toolbar() {
         ))}
       </div>
 
-      <button className="btn" onClick={() => setShowSettings(true)}>⚙ Настройки</button>
+      <button className="btn" data-testid="open-settings" onClick={() => setShowSettings(true)}>⚙ Настройки</button>
 
       {showSettings && <SettingsDialog onClose={() => setShowSettings(false)} />}
     </div>
