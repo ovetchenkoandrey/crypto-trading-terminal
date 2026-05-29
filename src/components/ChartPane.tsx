@@ -95,6 +95,8 @@ export function ChartPane({
   const [editingDrawing, setEditingDrawing] = useState<string | null>(null);
   const [chartReady, setChartReady] = useState(0);   // bumped after series exist to mount overlay
   const disableMagnetOnSelection = useStore((s) => s.settings.drawings.disableMagnetOnSelection);
+  const openOrderPopup = useStore((s) => s.openOrderPopup);
+  const lastUsedQty    = useStore((s) => s.lastUsedQty);
 
   // Toggle crosshair magnet based on whether a drawing is selected — keeps the
   // crosshair out of the way while you're editing handles.
@@ -549,6 +551,21 @@ export function ChartPane({
             onDelete={(id) => onRemoveDrawing?.(id)}
             onEdit={(id) => setEditingDrawing(id)}
             onToolDone={() => onToolDone?.()}
+            onCanvasClick={(price, anchor) => {
+              // Click above last price → Sell Limit; below → Buy Limit.
+              // Uses the latest ticker for `symbol` straight from the store.
+              if (!symbol) return;
+              const last = useStore.getState().tickers[symbol]?.lastPrice;
+              if (!last || price <= 0) return;
+              const side: "buy" | "sell" = price > last ? "sell" : "buy";
+              openOrderPopup({
+                symbol,
+                side,
+                type: "limit",
+                price,
+                qty: lastUsedQty > 0 ? lastUsedQty : undefined,
+              }, anchor);
+            }}
           />
         )}
       </div>
