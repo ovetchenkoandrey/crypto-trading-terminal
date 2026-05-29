@@ -1,0 +1,887 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<title>Strategy Tester — mockup</title>
+<style>
+  :root {
+    --bg-base:    #0e1116;
+    --bg-panel:   #14181e;
+    --bg-input:   #1a1f27;
+    --bg-hover:   #1f252e;
+    --border:     #232a34;
+    --fg:         #d8dee8;
+    --fg-dim:     #8a96a6;
+    --fg-mute:    #5a6573;
+    --accent:     #f0b90b;
+    --accent-soft:rgba(240,185,11,0.18);
+    --green:      #3cc85a;
+    --green-soft: rgba(60,200,90,0.15);
+    --red:        #dc3c3c;
+    --red-soft:   rgba(220,60,60,0.15);
+    --blue:       #468cf0;
+    --blue-soft:  rgba(70,140,240,0.15);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; background: var(--bg-base); color: var(--fg);
+    font: 12px/1.4 ui-sans-serif, system-ui, sans-serif; }
+  body { padding: 20px 28px; }
+
+  h2.section { font-size: 14px; color: var(--fg); margin: 32px 0 6px; font-weight: 600; }
+  h2.section .badge { display:inline-block; background: var(--accent-soft); color: var(--accent);
+    padding: 2px 8px; border-radius: 3px; font-size: 11px; margin-left: 8px; vertical-align: middle; }
+  .note { color: var(--fg-dim); font-size: 11px; margin-bottom: 12px; }
+
+  .mute  { color: var(--fg-mute); }
+  .dim   { color: var(--fg-dim); }
+  .green { color: var(--green); }
+  .red   { color: var(--red); }
+  .accent{ color: var(--accent); }
+  .blue  { color: var(--blue); }
+
+  /* ───────────────────── App fake skeleton ───────────────────── */
+  .app {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-base);
+    overflow: hidden;
+    margin-bottom: 28px;
+  }
+  .app-toolbar {
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    padding: 6px 10px;
+    display: flex; gap: 8px; align-items: center;
+    height: 36px;
+  }
+  .app-toolbar .icon-btn {
+    padding: 4px 8px; background: transparent; border: 1px solid transparent;
+    color: var(--fg-dim); border-radius: 3px; cursor: pointer; font-size: 12px;
+  }
+  .app-toolbar .icon-btn:hover { background: var(--bg-hover); color: var(--fg); }
+  .app-toolbar .sep { width: 1px; height: 18px; background: var(--border); }
+
+  .app-body {
+    display: grid;
+    grid-template-columns: 1fr 240px;
+    height: 460px;
+  }
+  .app-chart {
+    background: linear-gradient(180deg, var(--bg-panel) 0%, var(--bg-base) 100%);
+    border-right: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+  .app-chart-grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+    background-size: 80px 60px;
+  }
+  .app-chart-head {
+    position: absolute; top: 0; left: 0; right: 0;
+    background: var(--bg-panel);
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px; color: var(--fg-dim);
+    display: flex; justify-content: space-between; align-items: center;
+    z-index: 2;
+  }
+  .app-chart-head .sym { color: var(--fg); font-weight: 600; }
+  .app-chart-head .live-badge {
+    background: var(--green-soft); color: var(--green);
+    padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 600;
+  }
+  .app-chart-head .live-badge.backtest {
+    background: var(--blue-soft); color: var(--blue);
+  }
+
+  /* fake candles */
+  .chart-candle {
+    position: absolute; width: 4px;
+    background: var(--green);
+  }
+  .chart-candle.r { background: var(--red); }
+
+  /* trade markers on chart */
+  .trade-marker {
+    position: absolute;
+    font-size: 13px;
+    font-weight: 600;
+    pointer-events: none;
+  }
+  .trade-marker.buy  { color: var(--green); }
+  .trade-marker.sell { color: var(--red); }
+  .trade-link {
+    position: absolute; height: 1px;
+    background: rgba(240,185,11,0.5);
+    border-top: 1px dashed var(--accent);
+    pointer-events: none;
+  }
+  .price-axis {
+    position: absolute; right: 0; top: 0; bottom: 60px; width: 60px;
+    background: var(--bg-panel); border-left: 1px solid var(--border);
+    color: var(--fg-mute); font-size: 10px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    padding: 30px 6px; text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .time-axis {
+    position: absolute; left: 0; right: 60px; bottom: 0; height: 22px;
+    background: var(--bg-panel); border-top: 1px solid var(--border);
+    color: var(--fg-mute); font-size: 10px;
+    display: flex; justify-content: space-around; align-items: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .progress-overlay {
+    position: absolute; top: 60px; right: 70px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    padding: 6px 10px; border-radius: 4px;
+    font-size: 11px;
+    z-index: 3;
+    min-width: 200px;
+  }
+  .progress-overlay .row { display: flex; justify-content: space-between; gap: 10px; }
+  .progress-overlay .row .k { color: var(--fg-dim); }
+  .progress-overlay .row .v { font-variant-numeric: tabular-nums; color: var(--fg); }
+  .progress-overlay .pbar {
+    margin-top: 6px;
+    height: 4px; background: var(--bg-input); border-radius: 2px; overflow: hidden;
+  }
+  .progress-overlay .pbar > div {
+    height: 100%; background: var(--accent); transition: width 0.3s;
+  }
+
+  .app-side {
+    background: var(--bg-panel);
+    padding: 8px;
+    font-size: 11px; color: var(--fg-dim);
+  }
+
+  /* terminal area */
+  .terminal {
+    border-top: 1px solid var(--border);
+    background: var(--bg-base);
+    min-height: 280px;
+  }
+  .term-tabs {
+    display: flex; background: var(--bg-panel); border-bottom: 1px solid var(--border);
+    padding: 0 8px;
+  }
+  .term-tabs .t {
+    padding: 8px 14px; color: var(--fg-dim); border-bottom: 2px solid transparent;
+    cursor: pointer; font-size: 12px;
+  }
+  .term-tabs .t:hover { color: var(--fg); }
+  .term-tabs .t.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    background: var(--bg-base);
+  }
+  .term-tabs .t .badge {
+    background: var(--accent); color: #000; border-radius: 8px;
+    padding: 0 6px; font-size: 10px; margin-left: 4px; font-weight: 600;
+  }
+  .term-tabs .t .badge.b {
+    background: var(--blue); color: #fff;
+  }
+
+  .tester-body {
+    padding: 14px 16px;
+    color: var(--fg);
+  }
+
+  /* ─────── settings layout variants ─────── */
+  .settings-form {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 12px;
+  }
+  .form-col { display: flex; flex-direction: column; gap: 10px; }
+  .form-field { display: flex; flex-direction: column; gap: 3px; }
+  .form-field label {
+    color: var(--fg-mute); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.4px;
+  }
+  .form-field input, .form-field select {
+    background: var(--bg-input); border: 1px solid var(--border); color: var(--fg);
+    padding: 6px 8px; border-radius: 3px; font: inherit;
+    font-variant-numeric: tabular-nums;
+  }
+  .form-field input:focus, .form-field select:focus {
+    outline: none; border-color: var(--accent);
+  }
+
+  .seg {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    background: var(--bg-input); border: 1px solid var(--border);
+    border-radius: 3px; overflow: hidden;
+  }
+  .seg button {
+    background: transparent; color: var(--fg-dim); border: 0; padding: 6px 0;
+    cursor: pointer; font: inherit; font-size: 11px;
+    border-right: 1px solid var(--border);
+  }
+  .seg button:last-child { border-right: 0; }
+  .seg button.active {
+    background: var(--accent-soft); color: var(--accent); font-weight: 600;
+  }
+
+  .mode-strip {
+    display: flex; gap: 6px;
+  }
+  .mode-strip button {
+    flex: 1;
+    background: var(--bg-input); border: 1px solid var(--border); color: var(--fg-dim);
+    padding: 10px 6px; border-radius: 4px; cursor: pointer;
+    font: inherit; text-align: left;
+  }
+  .mode-strip button:hover { background: var(--bg-hover); color: var(--fg); }
+  .mode-strip button.active {
+    background: var(--accent-soft); border-color: var(--accent); color: var(--accent);
+  }
+  .mode-strip .lbl { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
+  .mode-strip .desc { font-size: 10px; color: var(--fg-mute); }
+  .mode-strip button.active .desc { color: var(--fg-dim); }
+
+  .controls-row {
+    display: flex; gap: 8px; align-items: center;
+    padding: 10px 0;
+    border-top: 1px solid var(--border);
+  }
+  .controls-row .pbtn {
+    background: var(--accent); color: #000; border: 0;
+    padding: 8px 18px; border-radius: 3px; cursor: pointer;
+    font: inherit; font-weight: 600; font-size: 12px;
+  }
+  .controls-row .pbtn:hover { filter: brightness(1.1); }
+  .controls-row .pbtn.danger { background: var(--red); color: #fff; }
+  .controls-row .pbtn.ghost {
+    background: var(--bg-input); color: var(--fg); border: 1px solid var(--border);
+  }
+  .controls-row .pbtn.icon { padding: 8px 12px; }
+
+  /* results layout */
+  .results-grid {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 14px;
+  }
+  .results-stats {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 12px;
+    font-size: 11px;
+  }
+  .results-stats h3 {
+    font-size: 11px; color: var(--fg-mute);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    margin: 0 0 8px;
+  }
+  .stat-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 4px 0; border-bottom: 1px solid var(--border);
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-row:last-child { border-bottom: 0; }
+  .stat-row .k { color: var(--fg-dim); }
+  .stat-row .v { font-weight: 500; }
+
+  .equity {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    height: 220px;
+    position: relative;
+    overflow: hidden;
+  }
+  .equity-head {
+    background: var(--bg-input); border-bottom: 1px solid var(--border);
+    padding: 4px 10px; color: var(--fg-mute); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    display: flex; justify-content: space-between;
+  }
+  .equity svg { width: 100%; height: 184px; display: block; }
+
+  .trades-table {
+    width: 100%; border-collapse: collapse;
+    font-size: 11px; font-variant-numeric: tabular-nums;
+    margin-top: 12px;
+  }
+  .trades-table th {
+    text-align: left; color: var(--fg-mute);
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px;
+    font-weight: 500; padding: 6px 8px;
+    background: var(--bg-input); border-bottom: 1px solid var(--border);
+  }
+  .trades-table td {
+    padding: 5px 8px; border-bottom: 1px solid var(--border);
+  }
+  .trades-table tr:hover td { background: var(--bg-hover); }
+
+  /* mini icons */
+  .ico-play::before  { content: "▶ "; }
+  .ico-pause::before { content: "⏸ "; }
+  .ico-stop::before  { content: "⏹ "; }
+  .ico-step::before  { content: "⏭ "; }
+
+  /* legend */
+  .legend {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    padding: 14px 16px;
+    border-radius: 4px;
+    font-size: 11px;
+    color: var(--fg-dim);
+    line-height: 1.7;
+    margin-bottom: 24px;
+  }
+  .legend b { color: var(--fg); font-weight: 600; }
+  .legend ul { margin: 6px 0 0 18px; padding: 0; }
+  .legend ul li { margin-bottom: 4px; }
+</style>
+</head>
+<body>
+
+<h2 class="section">Тестер стратегий <span class="badge">общая идея</span></h2>
+<div class="note">
+  Это ещё одна вкладка в Терминале (рядом с <i>Позиции / Открытые ордера / История / Журнал</i>). Внутри вкладки — настройки прогона + текущий статус + результаты.
+  Когда выбран <b>визуальный режим</b> и нажат Start — главный чарт сверху переключается в backtest-проигрывание: эмулированные свечи появляются по одной, на них рисуются маркеры BUY/SELL и линии открытых позиций ровно как в paper-режиме (мы переиспользуем тот же TradingOverlay).
+  В <b>фоновом режиме</b> главный чарт не трогаем — он остаётся live, прогон идёт без визуала, только статистика обновляется в табе.
+</div>
+
+<div class="legend">
+  <b>Возможные показатели стратегии (мы можем не делать все сразу):</b>
+  <ul>
+    <li><b>Net profit</b> — итоговая прибыль (USDT и %)</li>
+    <li><b>Trades / Win rate</b> — количество сделок и доля прибыльных</li>
+    <li><b>Max drawdown</b> — максимальная просадка по equity</li>
+    <li><b>Profit factor</b> — сумма прибылей / сумма убытков</li>
+    <li><b>Sharpe ratio</b> — отношение средней доходности к её волатильности</li>
+    <li><b>Average / max trade</b> — средняя и максимальная сделка</li>
+    <li><b>Avg holding time</b> — средняя длительность позиции</li>
+  </ul>
+</div>
+
+<!-- ═══════════════════ VARIANT A: Settings tab ═══════════════════ -->
+<h2 class="section">Вариант A — вкладка «Тестер» в Терминале, состояние «настройка» <span class="badge">до старта</span></h2>
+<div class="note">
+  Слева — выбор бота + символ + ТФ. Посередине — диапазон и режим. Справа — что отслеживаем. Снизу — большая кнопка Start.
+</div>
+
+<div class="app">
+  <div class="app-toolbar">
+    <span class="dim">Тулбар (как обычно — нерелевантно)</span>
+    <span class="spacer" style="flex:1"></span>
+    <span class="dim">⚙</span>
+  </div>
+  <div class="app-body">
+    <div class="app-chart">
+      <div class="app-chart-grid"></div>
+      <div class="app-chart-head">
+        <span><span class="sym">BTCUSDT · M15</span></span>
+        <span class="live-badge">● LIVE</span>
+      </div>
+      <!-- normal live candles -->
+      <script>document.write(Array.from({length: 50}, (_, i) => {
+        const h = 30 + Math.sin(i/4)*50 + Math.random()*30;
+        const top = 100 + Math.sin(i/8)*60 + Math.random()*20;
+        const color = Math.random()>0.5 ? '' : 'r';
+        return `<div class="chart-candle ${color}" style="left:${20+i*12}px; top:${top}px; height:${h}px;"></div>`;
+      }).join(''));</script>
+      <div class="price-axis">
+        <div>73800</div><div>73600</div><div>73400</div><div>73200</div>
+      </div>
+      <div class="time-axis">
+        <span>09:00</span><span>11:00</span><span>13:00</span><span>15:00</span>
+      </div>
+    </div>
+    <div class="app-side"><b>Навигатор / стакан</b><br><span class="mute">(показано для масштаба)</span></div>
+  </div>
+
+  <div class="terminal">
+    <div class="term-tabs">
+      <span class="t">Позиции</span>
+      <span class="t">Открытые ордера</span>
+      <span class="t">История сделок</span>
+      <span class="t">Алерты</span>
+      <span class="t">Журнал</span>
+      <span class="t active">Тестер <span class="badge">N</span></span>
+    </div>
+
+    <div class="tester-body">
+      <div class="settings-form">
+        <div class="form-col">
+          <div class="form-field">
+            <label>Стратегия (бот)</label>
+            <select><option>Grid Bot</option><option>DCA Strategy</option><option>MA Crossover (скоро)</option></select>
+          </div>
+          <div class="form-field">
+            <label>Символ</label>
+            <select><option>BTCUSDT</option><option>ETHUSDT</option></select>
+          </div>
+          <div class="form-field">
+            <label>Таймфрейм</label>
+            <select><option>M15</option><option>M5</option><option>H1</option></select>
+          </div>
+        </div>
+
+        <div class="form-col">
+          <div class="form-field">
+            <label>Диапазон</label>
+            <select><option>Последние 30 дней</option><option>Последние 90 дней</option><option>Кастомно…</option></select>
+          </div>
+          <div class="form-field">
+            <label>От</label>
+            <input value="2026-04-30" />
+          </div>
+          <div class="form-field">
+            <label>До</label>
+            <input value="2026-05-30" />
+          </div>
+        </div>
+
+        <div class="form-col">
+          <div class="form-field">
+            <label>Режим</label>
+            <div class="mode-strip">
+              <button class="active">
+                <div class="lbl">▶ Визуальный</div>
+                <div class="desc">Чарт сверху проигрывает свечи и маркеры</div>
+              </button>
+              <button>
+                <div class="lbl">⚡ Фоновый</div>
+                <div class="desc">Только итог, без визуала. Быстро.</div>
+              </button>
+            </div>
+          </div>
+          <div class="form-field">
+            <label>Скорость (визуальный)</label>
+            <div class="seg">
+              <button>1×</button><button>10×</button><button class="active">50×</button><button>Max</button>
+            </div>
+          </div>
+          <div class="form-field">
+            <label>Стартовый баланс (USDT)</label>
+            <input value="10 000" />
+          </div>
+        </div>
+      </div>
+
+      <div class="controls-row">
+        <button class="pbtn"><span class="ico-play"></span>Start</button>
+        <span style="color: var(--fg-dim); font-size: 11px;">
+          Свечей в диапазоне: <b>~2 880</b> · кэш: <b class="green">в наличии</b> · оценочное время: <b>~12 сек</b> (фоновый) / <b>~1 мин</b> (50×)
+        </span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ VARIANT A: Running ═══════════════════ -->
+<h2 class="section">Вариант A — состояние «прогон в визуальном режиме» <span class="badge">чарт играет</span></h2>
+<div class="note">
+  При Start чарт сверху переключается в backtest-режим. Он перестаёт реагировать на live-данные WebSocket для этого символа и проигрывает историю. На свечах появляются маркеры buy ▲ / sell ▼, линии открытых позиций и pending ордеров. В табе «Тестер» — таймлайн прогрессом + плеер. Параллельно растёт мини-equity справа внизу.
+</div>
+
+<div class="app">
+  <div class="app-toolbar">
+    <span class="dim">Тулбар</span>
+    <span class="spacer" style="flex:1"></span>
+    <span class="dim">⚙</span>
+  </div>
+  <div class="app-body">
+    <div class="app-chart">
+      <div class="app-chart-grid"></div>
+      <div class="app-chart-head">
+        <span><span class="sym">BTCUSDT · M15</span> <span class="dim">· 2026-05-12 14:30</span></span>
+        <span class="live-badge backtest">● BACKTEST · 53% · 50×</span>
+      </div>
+
+      <!-- backtest candles (partial) -->
+      <script>document.write(Array.from({length: 30}, (_, i) => {
+        const h = 30 + Math.sin(i/4)*60 + Math.random()*20;
+        const top = 110 + Math.sin(i/7)*50;
+        const color = Math.random()>0.5 ? '' : 'r';
+        return `<div class="chart-candle ${color}" style="left:${20+i*16}px; top:${top}px; height:${h}px;"></div>`;
+      }).join(''));</script>
+
+      <!-- trade markers -->
+      <div class="trade-marker buy"  style="left: 80px; top: 240px;">▲</div>
+      <div class="trade-marker sell" style="left: 240px; top: 130px;">▼</div>
+      <div class="trade-marker buy"  style="left: 340px; top: 230px;">▲</div>
+
+      <!-- position line entry -->
+      <div class="trade-link" style="left: 80px; right: 80px; top: 240px;"></div>
+
+      <div class="progress-overlay">
+        <div class="row"><span class="k">Время</span><span class="v">2026-05-12 14:30</span></div>
+        <div class="row"><span class="k">Свеча</span><span class="v">1 528 / 2 880</span></div>
+        <div class="row"><span class="k">Баланс</span><span class="v green">+184 USDT</span></div>
+        <div class="row"><span class="k">Сделок</span><span class="v">17</span></div>
+        <div class="pbar"><div style="width: 53%"></div></div>
+      </div>
+
+      <div class="price-axis">
+        <div>72500</div><div>72000</div><div>71500</div><div>71000</div>
+      </div>
+      <div class="time-axis">
+        <span>10.05</span><span>11.05</span><span>12.05</span><span>13.05</span>
+      </div>
+    </div>
+    <div class="app-side"><b>Навигатор / стакан</b><br><span class="mute">(не трогаются)</span></div>
+  </div>
+
+  <div class="terminal">
+    <div class="term-tabs">
+      <span class="t">Позиции <span class="badge b">2</span></span>
+      <span class="t">Открытые ордера <span class="badge b">8</span></span>
+      <span class="t">История сделок <span class="badge b">17</span></span>
+      <span class="t">Алерты</span>
+      <span class="t">Журнал</span>
+      <span class="t active">Тестер</span>
+    </div>
+
+    <div class="tester-body">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start;">
+        <!-- left: player + progress -->
+        <div>
+          <div style="font-size: 12px; margin-bottom: 8px; color: var(--fg-dim);">
+            <b style="color: var(--fg);">Прогон: Grid Bot · BTCUSDT · M15</b><br>
+            <span class="mute">от 2026-04-30 до 2026-05-30 · 50×</span>
+          </div>
+
+          <div class="controls-row" style="border-top: 0; padding: 6px 0;">
+            <button class="pbtn ghost icon" title="Пауза"><span class="ico-pause"></span></button>
+            <button class="pbtn ghost icon" title="Шаг"><span class="ico-step"></span></button>
+            <div class="seg" style="grid-template-columns: repeat(4, 1fr); flex: 1;">
+              <button>1×</button><button>10×</button><button class="active">50×</button><button>Max</button>
+            </div>
+            <button class="pbtn danger icon" title="Стоп"><span class="ico-stop"></span></button>
+          </div>
+
+          <div style="background: var(--bg-input); border: 1px solid var(--border); border-radius: 3px; padding: 8px 10px; margin-top: 8px;">
+            <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;">
+              <span class="dim">53% · 1528 / 2880 свечей</span>
+              <span class="dim">осталось ~30 сек</span>
+            </div>
+            <div style="height: 6px; background: var(--bg-panel); border-radius: 3px; overflow: hidden;">
+              <div style="width: 53%; height: 100%; background: var(--accent);"></div>
+            </div>
+          </div>
+
+          <div style="margin-top: 12px; font-size: 11px;">
+            <div class="stat-row"><span class="k">Сделок</span><span class="v">17 (12W / 5L)</span></div>
+            <div class="stat-row"><span class="k">Win rate</span><span class="v green">70.6%</span></div>
+            <div class="stat-row"><span class="k">Profit factor</span><span class="v green">2.4</span></div>
+            <div class="stat-row"><span class="k">Max drawdown</span><span class="v red">−128 USDT (−1.2%)</span></div>
+            <div class="stat-row"><span class="k">Баланс</span><span class="v green">10 184 USDT</span></div>
+          </div>
+        </div>
+
+        <!-- right: live equity curve -->
+        <div>
+          <div class="equity">
+            <div class="equity-head"><span>Equity (по ходу прогона)</span><span class="green">+184</span></div>
+            <svg viewBox="0 0 400 184" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#3cc85a" stop-opacity="0.4"/>
+                  <stop offset="100%" stop-color="#3cc85a" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <path d="M0,150 L20,140 L40,148 L60,130 L80,138 L100,120 L120,128 L140,110 L160,118 L180,90 L200,100 L210,90 L220,98" stroke="#3cc85a" stroke-width="1.5" fill="none"/>
+              <path d="M0,150 L20,140 L40,148 L60,130 L80,138 L100,120 L120,128 L140,110 L160,118 L180,90 L200,100 L210,90 L220,98 L220,184 L0,184 Z" fill="url(#grad)" />
+              <line x1="220" y1="0" x2="220" y2="184" stroke="rgba(240,185,11,0.3)" stroke-dasharray="2,3"/>
+            </svg>
+          </div>
+          <div class="dim" style="margin-top: 6px; font-size: 11px;">
+            Текущая точка обозначена жёлтой линией. Дорисовывается по мере прогона.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ VARIANT A: Results ═══════════════════ -->
+<h2 class="section">Вариант A — состояние «прогон завершён» <span class="badge">результаты</span></h2>
+<div class="note">
+  После окончания прогона чарт остаётся в backtest-режиме (можно скроллить, смотреть свечи и сделки), а внизу — статистика, equity-кривая и таблица сделок. Кнопка <b>Run again</b> повторяет с теми же параметрами; <b>Edit</b> возвращает в форму настроек; <b>Save report</b> сохраняет в файл.
+</div>
+
+<div class="app">
+  <div class="app-toolbar">
+    <span class="dim">Тулбар</span>
+  </div>
+  <div class="app-body" style="height: 320px;">
+    <div class="app-chart">
+      <div class="app-chart-grid"></div>
+      <div class="app-chart-head">
+        <span><span class="sym">BTCUSDT · M15</span> <span class="dim">· период 30.04 — 30.05</span></span>
+        <span class="live-badge backtest">● BACKTEST · ЗАВЕРШЁН</span>
+      </div>
+      <script>document.write(Array.from({length: 70}, (_, i) => {
+        const h = 30 + Math.sin(i/4)*60 + Math.random()*20;
+        const top = 80 + Math.sin(i/7)*40;
+        const color = Math.random()>0.5 ? '' : 'r';
+        return `<div class="chart-candle ${color}" style="left:${10+i*10}px; top:${top}px; height:${h}px;"></div>`;
+      }).join(''));</script>
+      <div class="trade-marker buy"  style="left: 60px;  top: 200px;">▲</div>
+      <div class="trade-marker sell" style="left: 140px; top: 100px;">▼</div>
+      <div class="trade-marker buy"  style="left: 230px; top: 190px;">▲</div>
+      <div class="trade-marker sell" style="left: 320px; top: 110px;">▼</div>
+      <div class="trade-marker buy"  style="left: 430px; top: 210px;">▲</div>
+      <div class="trade-marker sell" style="left: 540px; top: 130px;">▼</div>
+      <div class="price-axis">
+        <div>74000</div><div>73000</div><div>72000</div><div>71000</div>
+      </div>
+      <div class="time-axis">
+        <span>30.04</span><span>10.05</span><span>20.05</span><span>30.05</span>
+      </div>
+    </div>
+    <div class="app-side"><b>Навигатор</b></div>
+  </div>
+
+  <div class="terminal">
+    <div class="term-tabs">
+      <span class="t">Позиции</span>
+      <span class="t">Открытые ордера</span>
+      <span class="t">История сделок <span class="badge b">42</span></span>
+      <span class="t">Алерты</span>
+      <span class="t">Журнал</span>
+      <span class="t active">Тестер</span>
+    </div>
+
+    <div class="tester-body">
+      <div class="controls-row" style="border-top: 0; padding: 0 0 12px;">
+        <button class="pbtn"><span class="ico-play"></span>Run again</button>
+        <button class="pbtn ghost">Edit settings</button>
+        <button class="pbtn ghost">💾 Save report</button>
+        <span style="flex: 1; color: var(--fg-dim); font-size: 11px;">
+          Прогон <b style="color: var(--fg)">завершён</b> за 1м 04с
+        </span>
+      </div>
+
+      <div class="results-grid">
+        <div class="results-stats">
+          <h3>Сводка</h3>
+          <div class="stat-row"><span class="k">Net profit</span><span class="v green">+584 USDT (+5.84%)</span></div>
+          <div class="stat-row"><span class="k">Trades</span><span class="v">42 (29W / 13L)</span></div>
+          <div class="stat-row"><span class="k">Win rate</span><span class="v green">69.0%</span></div>
+          <div class="stat-row"><span class="k">Profit factor</span><span class="v">2.18</span></div>
+          <div class="stat-row"><span class="k">Max drawdown</span><span class="v red">−312 USDT (−2.9%)</span></div>
+          <div class="stat-row"><span class="k">Avg trade</span><span class="v">+13.9 USDT</span></div>
+          <div class="stat-row"><span class="k">Avg hold time</span><span class="v">4ч 22м</span></div>
+          <div class="stat-row"><span class="k">Sharpe (дневной)</span><span class="v">1.42</span></div>
+        </div>
+
+        <div>
+          <div class="equity">
+            <div class="equity-head"><span>Equity curve</span><span class="green">10 584 USDT</span></div>
+            <svg viewBox="0 0 400 184" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="grad2" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#3cc85a" stop-opacity="0.4"/>
+                  <stop offset="100%" stop-color="#3cc85a" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <path d="M0,150 L30,140 L60,148 L80,130 L100,138 L130,120 L150,128 L170,110 L200,118 L220,90 L250,100 L280,72 L310,80 L340,55 L370,62 L400,40" stroke="#3cc85a" stroke-width="1.5" fill="none"/>
+              <path d="M0,150 L30,140 L60,148 L80,130 L100,138 L130,120 L150,128 L170,110 L200,118 L220,90 L250,100 L280,72 L310,80 L340,55 L370,62 L400,40 L400,184 L0,184 Z" fill="url(#grad2)" />
+              <line x1="0" y1="150" x2="400" y2="150" stroke="rgba(255,255,255,0.1)" stroke-dasharray="2,3"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <table class="trades-table">
+        <thead>
+          <tr>
+            <th>#</th><th>Открыта</th><th>Сторона</th><th>Цена входа</th><th>Цена выхода</th>
+            <th>Объём</th><th>P/L</th><th>Holding</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td>30.04 06:00</td><td class="green">BUY</td><td>71 540</td><td>71 720</td><td>0.01</td><td class="green">+18.0</td><td>4ч 30м</td></tr>
+          <tr><td>2</td><td>30.04 10:30</td><td class="green">BUY</td><td>71 420</td><td>71 480</td><td>0.01</td><td class="green">+6.0</td><td>2ч 15м</td></tr>
+          <tr><td>3</td><td>30.04 12:45</td><td class="red">SELL</td><td>71 580</td><td>71 510</td><td>0.01</td><td class="green">+7.0</td><td>3ч 00м</td></tr>
+          <tr><td>4</td><td>30.04 15:45</td><td class="green">BUY</td><td>71 240</td><td>71 100</td><td>0.01</td><td class="red">−14.0</td><td>5ч 12м</td></tr>
+          <tr><td>5</td><td>…</td><td class="mute">…</td><td class="mute">…</td><td class="mute">…</td><td class="mute">…</td><td class="mute">…</td><td class="mute">…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ VARIANT B: background mode ═══════════════════ -->
+<h2 class="section">Вариант A, состояние «фоновый прогон» <span class="badge">второй режим</span></h2>
+<div class="note">
+  При выборе «⚡ Фоновый» главный чарт остаётся live. В табе «Тестер» — компактный progress-bar и текущие цифры. Можно работать с live-чартом параллельно (открывать ручные ордера и т.д.) — backtest-positions не смешиваются с paper-ом, у них отдельный набор в venue=backtest.
+</div>
+
+<div class="app">
+  <div class="app-toolbar">
+    <span class="dim">Тулбар</span>
+  </div>
+  <div class="app-body" style="height: 280px;">
+    <div class="app-chart">
+      <div class="app-chart-grid"></div>
+      <div class="app-chart-head">
+        <span><span class="sym">BTCUSDT · M15</span></span>
+        <span class="live-badge">● LIVE</span>
+      </div>
+      <script>document.write(Array.from({length: 40}, (_, i) => {
+        const h = 30 + Math.sin(i/4)*60;
+        const top = 100 + Math.sin(i/8)*40;
+        const color = Math.random()>0.5 ? '' : 'r';
+        return `<div class="chart-candle ${color}" style="left:${20+i*16}px; top:${top}px; height:${h}px;"></div>`;
+      }).join(''));</script>
+      <div class="price-axis">
+        <div>73800</div><div>73600</div><div>73400</div><div>73200</div>
+      </div>
+      <div class="time-axis">
+        <span>10:00</span><span>12:00</span><span>14:00</span><span>16:00</span>
+      </div>
+    </div>
+    <div class="app-side"><b>Навигатор</b></div>
+  </div>
+
+  <div class="terminal">
+    <div class="term-tabs">
+      <span class="t">Позиции</span>
+      <span class="t">Открытые ордера</span>
+      <span class="t">История сделок</span>
+      <span class="t">Алерты</span>
+      <span class="t">Журнал</span>
+      <span class="t active">Тестер <span class="badge">▶</span></span>
+    </div>
+
+    <div class="tester-body">
+      <div style="font-size: 12px; margin-bottom: 8px; color: var(--fg-dim);">
+        <b style="color: var(--fg);">⚡ Фоновый прогон: Grid Bot · BTCUSDT · M15</b><br>
+        <span class="mute">30 дней · стартовый баланс 10 000 USDT</span>
+      </div>
+
+      <div style="background: var(--bg-input); border: 1px solid var(--border); border-radius: 3px; padding: 8px 10px;">
+        <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;">
+          <span class="dim">82% · 2 360 / 2 880 свечей · 9 сек прошло</span>
+          <span class="dim">осталось ~2 сек</span>
+        </div>
+        <div style="height: 6px; background: var(--bg-panel); border-radius: 3px; overflow: hidden;">
+          <div style="width: 82%; height: 100%; background: var(--accent);"></div>
+        </div>
+      </div>
+
+      <div style="margin-top: 12px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; font-size: 11px;">
+        <div><div class="dim" style="font-size: 10px; text-transform: uppercase;">Сделок</div><div style="font-size: 14px; margin-top: 3px;">38</div></div>
+        <div><div class="dim" style="font-size: 10px; text-transform: uppercase;">Win rate</div><div class="green" style="font-size: 14px; margin-top: 3px;">68%</div></div>
+        <div><div class="dim" style="font-size: 10px; text-transform: uppercase;">P/L</div><div class="green" style="font-size: 14px; margin-top: 3px;">+512</div></div>
+        <div><div class="dim" style="font-size: 10px; text-transform: uppercase;">Max DD</div><div class="red" style="font-size: 14px; margin-top: 3px;">−298</div></div>
+        <div><div class="dim" style="font-size: 10px; text-transform: uppercase;">Скорость</div><div style="font-size: 14px; margin-top: 3px;">~280×</div></div>
+      </div>
+
+      <div class="controls-row" style="margin-top: 12px;">
+        <button class="pbtn danger icon" title="Стоп"><span class="ico-stop"></span>Cancel</button>
+        <span style="color: var(--fg-dim); font-size: 11px;">
+          Фоновый режим — главный чарт не трогается. Можно параллельно торговать paper-у.
+        </span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ Доп точка входа: BotConfig ═══════════════════ -->
+<h2 class="section">Доп точка входа из BotConfigDialog <span class="badge">альтернатива/дополнение</span></h2>
+<div class="note">
+  Когда настраиваешь параметры бота, кнопка <b>«Запустить backtest»</b> сразу заводит таб «Тестер» с пред-заполненной формой (конкретный bot config + текущий символ + дефолтный диапазон 30 дней). Полезно для итераций «поменял параметры → backtest → поменял → backtest».
+</div>
+
+<div style="display: flex; gap: 16px; align-items: flex-start;">
+  <div style="background: var(--bg-panel); border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px; width: 360px;">
+    <div style="font-size: 13px; font-weight: 600; margin-bottom: 12px; display: flex; justify-content: space-between;">
+      <span>🤖 Grid Bot · BTCUSDT</span>
+      <span class="mute" style="font-size: 12px;">✕</span>
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px; margin-bottom: 12px;">
+      <div><div class="dim">Нижняя цена</div><input value="70 000" style="width: 100%; margin-top: 3px;"></div>
+      <div><div class="dim">Верхняя цена</div><input value="80 000" style="width: 100%; margin-top: 3px;"></div>
+      <div><div class="dim">Уровней</div><input value="10" style="width: 100%; margin-top: 3px;"></div>
+      <div><div class="dim">Qty/уровень</div><input value="0.001" style="width: 100%; margin-top: 3px;"></div>
+    </div>
+    <div style="display: flex; gap: 8px; justify-content: flex-end;">
+      <button class="pbtn ghost">Отмена</button>
+      <button class="pbtn ghost">📊 Backtest</button>
+      <button class="pbtn">▶ Старт (live)</button>
+    </div>
+  </div>
+
+  <div class="legend" style="margin: 0; flex: 1;">
+    <b>Логика:</b>
+    <ul>
+      <li>Клик по «📊 Backtest» — открывает таб <b>Тестер</b> с предзаполненной формой: текущий config бота + символ + последние 30 дней + режим «Фоновый» (потому что итеративно).</li>
+      <li>После прогона можно поправить params бота → опять Backtest. Цикл подбора.</li>
+      <li>Когда нравится результат — нажимаешь <b>Старт (live)</b> в этом же диалоге, бот идёт работать paper-у.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══════════════════ Что обсуждаем ═══════════════════ -->
+<h2 class="section">Что нужно решить по дизайну</h2>
+
+<div class="legend">
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+    <div>
+      <b>Точки входа</b>
+      <ul>
+        <li>Таб «Тестер» в Терминале — основная. <span class="mute">по умолчанию</span></li>
+        <li>Кнопка «📊 Backtest» в BotConfigDialog — дополнительная, ведёт в тот же таб. <span class="mute">включить?</span></li>
+        <li>В тулбаре отдельную кнопку — НЕ делать, не нужно.</li>
+      </ul>
+
+      <b>Режимы</b>
+      <ul>
+        <li>Визуальный — чарт сверху проигрывает. Скорость 1× / 10× / 50× / Max.</li>
+        <li>Фоновый — чарт не трогается, прогон в стороне. Только итог.</li>
+      </ul>
+
+      <b>Диапазон</b>
+      <ul>
+        <li>Пресет: 7 / 30 / 90 / 365 дней.</li>
+        <li>Кастомный: from / to (даты).</li>
+        <li>Если данных не хватает — подгрузка из Bybit REST, индикатор «загружается». Лимит на 5 лет в БД.</li>
+      </ul>
+    </div>
+
+    <div>
+      <b>Что показываем в Сводке</b>
+      <ul>
+        <li>Net profit (USDT и %)</li>
+        <li>Trades / Win rate / Profit factor</li>
+        <li>Max drawdown</li>
+        <li>Avg trade / Avg hold time</li>
+        <li>Sharpe ratio — нужен?</li>
+        <li>R/R ratio — нужен?</li>
+      </ul>
+
+      <b>Изоляция</b>
+      <ul>
+        <li>Backtest позиции/ордера живут отдельно — venue.backtest. Не смешиваются с paper. Так что можно гонять backtest пока paper тоже работает.</li>
+      </ul>
+
+      <b>Что НЕ делаем сейчас (отложим)</b>
+      <ul>
+        <li>Optimization (запуск с разными params)</li>
+        <li>Multi-symbol (один символ за прогон)</li>
+        <li>Forward testing / walk-forward</li>
+        <li>Backtest ручной торговли (только боты)</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
