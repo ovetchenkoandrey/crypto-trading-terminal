@@ -14,6 +14,7 @@ import { logInfo } from "../lib/eventBus";
 import { venue } from "../lib/execution/router";
 import { botManager } from "../lib/bots/manager";
 import { OrderPopup } from "./order/OrderPopup";
+import { TrainingToast } from "./order/TrainingToast";
 
 const SHORTCUTS: Record<string, PanelKey> = {
   d: "orderBook",
@@ -153,6 +154,7 @@ export function MainWindow() {
 
       <StatusBar />
       <OrderPopup />
+      <TrainingToast />
     </div>
   );
 }

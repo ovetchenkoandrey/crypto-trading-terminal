@@ -95,6 +95,12 @@ export function ChartPane({
   const lastTimeRef = useRef<number>(0);
   const lastLenRef = useRef<number>(0);
   const indSeriesRef = useRef<IndSeriesSet[]>([]);
+  // Live price lines on the chart for open positions and pending orders.
+  // Recreated wholesale on every state change — N is small (<100) so this is cheap.
+  const tradingLinesRef = useRef<import("lightweight-charts").IPriceLine[]>([]);
+  // Marker plugin for fill triangles (▲ buy, ▼ sell) on candles. Separate from
+  // the indicator markers plugin so we can refresh it independently.
+  const fillMarkersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const [ohlc, setOhlc] = useState<OhlcDisplay | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedDrawing, setSelectedDrawing] = useState<string | null>(null);
@@ -574,6 +580,75 @@ export function ChartPane({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [indicators, data]);
+
+  // ─── Trading overlay: position / order price lines + fill markers on candles ───
+  // Subscribes to venue snapshots through paper* store slices (works for any venue
+  // that writes to those — currently Paper). When backtest/demo/live venues land,
+  // they'll write to the same slices through their adapters.
+  const allPositions = useStore((s) => s.paperPositions);
+  const allOrders    = useStore((s) => s.paperOrders);
+  const allHistory   = useStore((s) => s.paperHistory);
+  const showTradingOverlay = useStore((s) => s.settings.paperTrading.pnlMode); // dummy dep until a dedicated setting
+  void showTradingOverlay;
+  useEffect(() => {
+    if (chartReady <= 0) return;
+    const candle = candleSeriesRef.current;
+    if (!candle || !symbol) return;
+
+    // Always clear previous lines first — cheap, avoids drift on partial updates.
+    tradingLinesRef.current.forEach((pl) => { try { candle.removePriceLine(pl); } catch { /* gone */ } });
+    tradingLinesRef.current = [];
+
+    // 1. Open positions for THIS symbol
+    const positions = allPositions.filter((p) => p.symbol === symbol);
+    for (const p of positions) {
+      const isBuy = p.side === "buy";
+      const pl = candle.createPriceLine({
+        price: p.entryPrice,
+        color: isBuy ? "#3cc85a" : "#dc3c3c",
+        lineWidth: 2,
+        lineStyle: 0,         // Solid
+        axisLabelVisible: true,
+        title: `${isBuy ? "LONG" : "SHORT"} ${p.qty}`,
+      });
+      tradingLinesRef.current.push(pl);
+    }
+
+    // 2. Pending limit / stop orders for THIS symbol
+    const orders = allOrders.filter((o) => o.status === "pending" && o.symbol === symbol);
+    for (const o of orders) {
+      const isBuy = o.side === "buy";
+      const pl = candle.createPriceLine({
+        price: o.price,
+        color: isBuy ? "rgba(60,200,90,0.75)" : "rgba(220,60,60,0.75)",
+        lineWidth: 1,
+        lineStyle: 2,         // Dashed
+        axisLabelVisible: true,
+        title: `${o.type === "stop" ? "STOP" : "LIMIT"} ${o.side.toUpperCase()} ${o.qty}`,
+      });
+      tradingLinesRef.current.push(pl);
+    }
+
+    // 3. Fill markers from trade history (entry+exit triangles). Keep just the last 100
+    //    for the visible symbol — older fills clutter the chart.
+    const fills = allHistory
+      .filter((t) => t.symbol === symbol)
+      .slice(-100)
+      .map((t): SeriesMarker<Time> => ({
+        time: Math.floor(t.ts / 1000) as UTCTimestamp,
+        position: t.side === "buy" ? "belowBar" : "aboveBar",
+        shape:    t.side === "buy" ? "arrowUp"  : "arrowDown",
+        color:    t.pnl >= 0 ? "#3cc85a" : "#dc3c3c",
+        size:     1,
+      }));
+
+    if (fillMarkersRef.current) {
+      fillMarkersRef.current.setMarkers(fills);
+    } else if (fills.length > 0) {
+      fillMarkersRef.current = createSeriesMarkers(candle, fills);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chartReady, symbol, allPositions, allOrders, allHistory]);
 
   const isEmpty = data.length === 0;
 

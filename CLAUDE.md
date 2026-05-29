@@ -67,6 +67,23 @@ Vite dev-сервер на `http://localhost:5173`. Поднимать чере�
 Реальный mainnet — только руками пользователя. Любая trading-логика проверяется через
 `PaperVenue` (`src/lib/execution/PaperVenue.ts`) на синтетических свечах.
 
+## Cheat sheet для новой сессии (TL;DR)
+
+Если открываешь новый чат и нужно быстро ввести Claude в курс — этого хватит:
+
+```
+- Стек: Electron + Vite + React + Zustand + Bybit + lightweight-charts.
+- Чистые функции (indicators / execution / paper / bots): пиши тесты рядом
+  как `foo.test.ts`, прогоняй `npm test`. Сейчас 32 теста.
+- UI: правишь компонент → `preview_start name="vite"` → клик/snapshot через
+  `data-testid` (список в CLAUDE.md ниже) → скриншот пользователю.
+- Electron-обёртка (electron/main.ts, preload.ts): автотестов нет, проси прогнать
+  `npm run dev` руками.
+- Bybit live mainnet: НИКОГДА автоматически. Только PaperVenue на синтетике.
+- Не запускай `npm run dev` для UI-проверок — он поднимет Electron окно поверх.
+  Используй `npm run dev:vite` или `preview_start name="vite"`.
+```
+
 ## Стек / соглашения
 
 - TypeScript strict, ESM.

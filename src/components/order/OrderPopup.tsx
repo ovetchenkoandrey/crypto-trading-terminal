@@ -24,6 +24,7 @@ export function OrderPopup() {
   const tickers      = useStore((s) => s.tickers);
   const paperBalance = useStore((s) => s.paperBalance);
   const settings     = useStore((s) => s.settings);
+  const openConfirm  = useStore((s) => s.openPendingConfirm);
 
   // Local form state — reset on every (re)open. Keying the component handles that.
   if (!popup.open) return null;
@@ -34,7 +35,9 @@ export function OrderPopup() {
                     tickers={tickers}
                     paperBalance={paperBalance}
                     feeRate={settings.paperTrading.feeRate}
-                    slippageCfg={settings.paperTrading.slippage} />;
+                    slippageCfg={settings.paperTrading.slippage}
+                    confirmThresholdLow={settings.paperTrading.confirmThresholdLow}
+                    openConfirm={openConfirm} />;
 }
 
 interface BodyProps {
@@ -45,9 +48,11 @@ interface BodyProps {
   paperBalance: number;
   feeRate: number;
   slippageCfg: ReturnType<typeof useStore.getState>["settings"]["paperTrading"]["slippage"];
+  confirmThresholdLow: number;
+  openConfirm: ReturnType<typeof useStore.getState>["openPendingConfirm"];
 }
 
-function PopupBody({ popup, close, setLastQty, tickers, paperBalance, feeRate, slippageCfg }: BodyProps) {
+function PopupBody({ popup, close, setLastQty, tickers, paperBalance, feeRate, slippageCfg, confirmThresholdLow, openConfirm }: BodyProps) {
   const { symbol, side: defaultSide, type: defaultType, price: defaultPrice, qty: defaultQty,
           advanced: defaultAdvanced, focusQty } = popup.defaults;
 
@@ -183,14 +188,19 @@ function PopupBody({ popup, close, setLastQty, tickers, paperBalance, feeRate, s
 
   function submit() {
     if (!canSubmit || side === undefined) return;
+    const px = type === "market" ? (lastPrice || refPrice) : priceNum;
+    const request = { symbol, side, type, price: px, qty: qtyBase };
+
+    // Market orders above the configured threshold need an explicit confirm.
+    // Limit / Stop orders don't fill immediately, so no threshold check.
+    if (type === "market" && confirmThresholdLow > 0 && grossUsdt >= confirmThresholdLow) {
+      openConfirm("market-threshold", request, grossUsdt);
+      close();   // close the popup; confirm toast handles the final placement
+      return;
+    }
+
     try {
-      venue.placeOrder({
-        symbol,
-        side,
-        type,
-        price: type === "market" ? (lastPrice || refPrice) : priceNum,
-        qty:   qtyBase,
-      });
+      venue.placeOrder(request);
       setLastQty(qtyBase);
       close();
     } catch (err) {

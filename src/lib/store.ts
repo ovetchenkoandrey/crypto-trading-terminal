@@ -157,6 +157,26 @@ export interface OrderPopupState {
   };
 }
 
+/**
+ * Pending confirmation for a market order that exceeds a threshold or comes from
+ * a dangerous shortcut that fires the first time. The actual placement is held
+ * in `request`; on confirm the caller runs it through `venue.placeOrder`.
+ */
+export interface PendingConfirm {
+  open: boolean;
+  /** Where the confirm came from — affects the wording and whether we also offer
+   *  to disable the gesture going forward. */
+  kind: "shift-click-first" | "market-threshold";
+  request: {
+    symbol: string;
+    side:   Side;
+    type:   OrderType;
+    price:  number;
+    qty:    number;
+  } | null;
+  estUsdt: number;
+}
+
 interface VolatileSlice {
   tickers: Record<string, Ticker>;
   orderbook: Orderbook | null;
@@ -165,6 +185,7 @@ interface VolatileSlice {
   connection: ConnectionState;
   allSymbols: SymbolMeta[];          // loaded from Bybit on startup (spot + linear)
   orderPopup: OrderPopupState;
+  pendingConfirm: PendingConfirm;
 }
 
 interface Actions {
@@ -217,6 +238,9 @@ interface Actions {
   closeOrderPopup: () => void;
   setLastUsedQty: (qty: number) => void;
   markFirstShiftClickToastShown: () => void;
+
+  openPendingConfirm: (kind: PendingConfirm["kind"], request: NonNullable<PendingConfirm["request"]>, estUsdt: number) => void;
+  closePendingConfirm: () => void;
 }
 
 // minimal recursive partial for settings updates
@@ -276,6 +300,7 @@ const DEFAULT_VOLATILE: VolatileSlice = {
   connection: { connected: false, latencyMs: null },
   allSymbols: DEFAULT_SYMBOLS,        // fallback until REST loads the full list
   orderPopup: { open: false, anchor: null, defaults: { symbol: "BTCUSDT", type: "market" } },
+  pendingConfirm: { open: false, kind: "market-threshold", request: null, estUsdt: 0 },
 };
 
 function sortLevels(side: "asks" | "bids", levels: OrderbookLevel[]): OrderbookLevel[] {
@@ -463,6 +488,13 @@ export const useStore = create<Store>()(
       })),
       setLastUsedQty: (qty) => set({ lastUsedQty: qty }),
       markFirstShiftClickToastShown: () => set({ firstShiftClickToastShown: true }),
+
+      openPendingConfirm: (kind, request, estUsdt) => set({
+        pendingConfirm: { open: true, kind, request, estUsdt },
+      }),
+      closePendingConfirm: () => set((s) => ({
+        pendingConfirm: { ...s.pendingConfirm, open: false },
+      })),
     }),
     {
       name: "trading-app-store",

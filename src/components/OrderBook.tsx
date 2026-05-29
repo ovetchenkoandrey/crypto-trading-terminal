@@ -10,11 +10,12 @@ export function OrderBook() {
   const orderbook  = useStore((s) => s.orderbook);
   const activeSym  = useStore((s) => s.activeSymbol);
   const ticker     = useStore((s) => s.tickers[activeSym]);
-  const openPopup  = useStore((s) => s.openOrderPopup);
-  const dangerous  = useStore((s) => s.settings.dangerous);
-  const lastUsedQty = useStore((s) => s.lastUsedQty);
-  const firstShown  = useStore((s) => s.firstShiftClickToastShown);
-  const markShown   = useStore((s) => s.markFirstShiftClickToastShown);
+  const openPopup    = useStore((s) => s.openOrderPopup);
+  const openConfirm  = useStore((s) => s.openPendingConfirm);
+  const dangerous    = useStore((s) => s.settings.dangerous);
+  const lastUsedQty  = useStore((s) => s.lastUsedQty);
+  const firstShown   = useStore((s) => s.firstShiftClickToastShown);
+  const markShown    = useStore((s) => s.markFirstShiftClickToastShown);
 
   const symbol = orderbook?.symbol ?? activeSym;
   const precision = getPricePrecision(symbol, ticker?.lastPrice);
@@ -52,22 +53,20 @@ export function OrderBook() {
   // "I want to sell higher" → click above. "I want to buy lower" → click below.
   function handleRowClick(e: React.MouseEvent, price: number, kind: "ask" | "bid", qty: number) {
     void qty;
-    const side = kind === "ask" ? "sell" : "buy";
+    const side: "buy" | "sell" = kind === "ask" ? "sell" : "buy";
 
     if (e.shiftKey && dangerous.shiftClickOrderbook) {
-      // Quick market — see firstShown for training confirm.
+      // Quick market.
       const useQty = lastUsedQty > 0 ? lastUsedQty : 0.001;
+      const request = { symbol, side, type: "market" as const, price, qty: useQty };
       if (!firstShown) {
-        const ok = window.confirm(
-          `⚡ Включён shift-click — этот жест отправляет market без подтверждения.\n\n` +
-          `Сейчас: ${side.toUpperCase()} ${useQty} ${symbolBase(symbol)} @ market (~${(useQty * price).toFixed(2)} USDT).\n\n` +
-          `Дальше — без подтверждений, до отключения опции.`,
-        );
+        // First time after enabling shift-click — non-blocking training toast.
         markShown();
-        if (!ok) return;
+        openConfirm("shift-click-first", request, useQty * price);
+        return;
       }
       try {
-        venue.placeOrder({ symbol, side, type: "market", price, qty: useQty });
+        venue.placeOrder(request);
         logOk("order", `⚡ shift-click: ${side} ${useQty} ${symbol} @ market`);
       } catch (err) {
         logWarn("order", `не удалось разместить: ${String(err)}`);
