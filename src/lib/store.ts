@@ -8,6 +8,8 @@ export type { Drawing, DrawingTool } from "./drawings/types";
 import type { Settings } from "./settings";
 import { DEFAULT_SETTINGS } from "./settings";
 export type { Settings } from "./settings";
+import type { VenueMode } from "./execution/types";
+export type { VenueMode } from "./execution/types";
 
 export type PanelKey = "marketWatch" | "orderBook" | "navigator" | "terminal";
 export type PanelsState = Record<PanelKey, boolean>;
@@ -131,6 +133,7 @@ interface PersistedSlice {
   paperOrders: PaperOrder[];
   paperHistory: PaperTrade[];
   botConfigs: BotConfig[];
+  venueMode: VenueMode;            // which execution backend is active app-wide
 }
 
 interface VolatileSlice {
@@ -185,6 +188,8 @@ interface Actions {
 
   updateSettings: (partial: PartialDeep<Settings>) => void;
   resetSettings: () => void;
+
+  setVenueMode: (mode: VenueMode) => void;
 }
 
 // minimal recursive partial for settings updates
@@ -212,6 +217,7 @@ const DEFAULT_PERSISTED: PersistedSlice = {
   paperOrders: [],
   paperHistory: [],
   botConfigs: [],
+  venueMode: "paper",
   settings: DEFAULT_SETTINGS,
 };
 
@@ -416,6 +422,8 @@ export const useStore = create<Store>()(
 
       updateSettings: (partial) => set((s) => ({ settings: mergeDeep(s.settings, partial) })),
       resetSettings: () => set({ settings: DEFAULT_SETTINGS }),
+
+      setVenueMode: (mode) => set({ venueMode: mode }),
     }),
     {
       name: "trading-app-store",
@@ -436,6 +444,7 @@ export const useStore = create<Store>()(
         paperOrders: state.paperOrders,
         paperHistory: state.paperHistory,
         botConfigs: state.botConfigs,
+        venueMode: state.venueMode,
       }),
       version: 1,
     },

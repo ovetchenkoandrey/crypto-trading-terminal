@@ -1,9 +1,8 @@
-import { useStore } from "./store";
-import { paperEngine } from "./paper/engine";
+import { venue } from "./execution/router";
 import { logOk, logWarn } from "./eventBus";
 
 export function closeAllPositions(): void {
-  const positions = useStore.getState().paperPositions;
+  const positions = venue.getOpenPositions();
   if (positions.length === 0) {
     logOk("script", "нет открытых позиций");
     return;
@@ -11,7 +10,7 @@ export function closeAllPositions(): void {
   if (!window.confirm(`Закрыть все ${positions.length} открытых позиций по рыночной цене?`)) return;
   let closed = 0;
   for (const p of positions) {
-    try { paperEngine.closePosition(p.id); closed++; } catch (e) {
+    try { venue.closePosition(p.id); closed++; } catch (e) {
       logWarn("script", `не удалось закрыть ${p.symbol}: ${String(e)}`);
     }
   }
@@ -19,7 +18,7 @@ export function closeAllPositions(): void {
 }
 
 export function exportHistoryCsv(): void {
-  const history = useStore.getState().paperHistory;
+  const history = venue.getHistory();
   if (history.length === 0) {
     logWarn("script", "история сделок пуста");
     return;

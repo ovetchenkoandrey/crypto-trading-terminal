@@ -1113,3 +1113,16 @@ button { font-family: inherit; }
   border-radius: 3px;
 }
 .cell-picker-caret:hover { background: var(--bg-hover); color: var(--fg); }
+
+/* ───────────── venue badge in status bar ───────────── */
+.venue-badge {
+  font-weight: 600;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.3px;
+}
+.venue-badge.venue-paper    { background: rgba(60, 200, 90, 0.15);  color: #3cc85a; }
+.venue-badge.venue-demo     { background: rgba(240, 185, 11, 0.18); color: #f0b90b; }
+.venue-badge.venue-live     { background: rgba(220, 60, 60, 0.18);  color: #dc3c3c; }
+.venue-badge.venue-backtest { background: rgba(70, 140, 240, 0.18); color: #468cf0; }

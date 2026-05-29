@@ -1,6 +1,7 @@
 import { useStore } from "../store";
-import type { BotConfig, PaperOrder } from "../store";
-import { paperEngine, getTicker } from "../paper/engine";
+import type { BotConfig } from "../store";
+import { venue } from "../execution/router";
+import type { VenueOrder } from "../execution/types";
 import { getBotFactory } from "./registry";
 import type { Bot, BotContext } from "./base";
 import { logOk, logWarn, bus, emitBot } from "../eventBus";
@@ -15,6 +16,10 @@ class BotManager {
       if (ev.type === "order_filled" && ev.botId) {
         const bot = this.instances.get(ev.botId);
         if (!bot) return;
+        // Look up the actual filled order through the active venue. Each venue is responsible
+        // for emitting "order_filled" with an orderId that resolves via getOpenOrders/getHistory
+        // — but easier: we keep paper's behaviour of finding it in store paperOrders for now.
+        // TODO: when demo/live land, route this through venue.findOrder(id).
         const order = useStore.getState().paperOrders.find((o) => o.id === (ev.data.orderId as string));
         if (!order || order.status !== "filled" || order.filledPrice === undefined) return;
         bot.onOrderFilled(this.contextFor(ev.botId), order, order.filledPrice);
@@ -66,11 +71,11 @@ class BotManager {
 
   private contextFor(botId: string): BotContext {
     return {
-      placeOrder: (req) => paperEngine.placeOrder({ ...req, botId }),
-      cancelOrder: (id, reason) => paperEngine.cancelOrder(id, reason ?? `bot:${botId}`),
-      cancelAllOrders: () => paperEngine.cancelOrdersByBot(botId),
-      getPendingOrders: (): PaperOrder[] => useStore.getState().paperOrders.filter((o) => o.status === "pending" && o.botId === botId),
-      getTicker,
+      placeOrder: (req) => venue.placeOrder({ ...req, botId }),
+      cancelOrder: (id, reason) => venue.cancelOrder(id, reason ?? `bot:${botId}`),
+      cancelAllOrders: () => venue.cancelOrdersByBot(botId),
+      getPendingOrders: (): VenueOrder[] => venue.getOpenOrders().filter((o) => o.botId === botId),
+      getTicker: (symbol) => venue.getTicker(symbol),
     };
   }
 }

@@ -1,5 +1,8 @@
-import type { BotConfig, PaperOrder, Ticker, Side, OrderType } from "../store";
+import type { BotConfig, Ticker, Side, OrderType } from "../store";
+import type { VenueOrder } from "../execution/types";
 
+// Bot context is intentionally agnostic of which ExecutionVenue is behind it —
+// the BotManager wires the active venue in. Bots only see VenueOrder shapes.
 export interface BotContext {
   placeOrder: (req: {
     symbol: string;
@@ -7,10 +10,10 @@ export interface BotContext {
     type: OrderType;
     price: number;
     qty: number;
-  }) => PaperOrder;
+  }) => VenueOrder;
   cancelOrder: (id: string, reason?: string) => void;
   cancelAllOrders: () => number;     // returns count cancelled
-  getPendingOrders: () => PaperOrder[];
+  getPendingOrders: () => VenueOrder[];
   getTicker: (symbol: string) => Ticker | undefined;
 }
 
@@ -18,7 +21,7 @@ export interface Bot {
   config: BotConfig;
   start(ctx: BotContext): void;
   stop(ctx: BotContext): void;
-  onOrderFilled(ctx: BotContext, order: PaperOrder, fillPrice: number): void;
+  onOrderFilled(ctx: BotContext, order: VenueOrder, fillPrice: number): void;
 }
 
 export interface BotFactory {

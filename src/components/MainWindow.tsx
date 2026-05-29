@@ -11,7 +11,7 @@ import { ChartMosaic } from "./ChartMosaic";
 import { ws, init as initWs } from "../lib/bybitWs";
 import { loadInstruments } from "../lib/instruments";
 import { logInfo } from "../lib/eventBus";
-import { paperEngine } from "../lib/paper/engine";
+import { venue } from "../lib/execution/router";
 import { botManager } from "../lib/bots/manager";
 
 const SHORTCUTS: Record<string, PanelKey> = {
@@ -27,6 +27,7 @@ export function MainWindow() {
   const setTheme    = useStore((s) => s.setTheme);
   const activeSymbol = useStore((s) => s.activeSymbol);
   const settings     = useStore((s) => s.settings);
+  const venueMode    = useStore((s) => s.venueMode);
 
   // Theme attribute on body
   useEffect(() => {
@@ -44,16 +45,22 @@ export function MainWindow() {
     document.body.style.setProperty("--font-scale", String(FONT_SCALE[s.fontScale]));
   }, [settings.appearance]);
 
+  // Keep VenueRouter aligned with persisted venueMode (e.g. user picked a non-paper
+  // venue, app restarts → switch to it).
+  useEffect(() => {
+    if (venue.mode !== venueMode) venue.switchMode(venueMode);
+  }, [venueMode]);
+
   // Init WS + paper engine + bot manager once + load full symbol list
   useEffect(() => {
     logInfo("app", "starting Trading App v0.2.0");
     initWs();
-    paperEngine.init();
+    venue.init();           // starts the active execution venue (paper by default)
     botManager.init();
     loadInstruments();   // populates store.allSymbols (spot + linear)
     return () => {
       ws.disconnect();
-      paperEngine.shutdown();
+      venue.shutdown();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
