@@ -7,7 +7,7 @@ interface Props {
   onClose:  () => void;
 }
 
-const ORDER: IndicatorKind[] = ["sma", "ema", "rsi", "macd", "bollinger", "stochastic", "atr"];
+const ORDER: IndicatorKind[] = ["sma", "ema", "rsi", "macd", "bollinger", "stochastic", "atr", "fractals"];
 
 export function IndicatorPicker({ onPick, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);

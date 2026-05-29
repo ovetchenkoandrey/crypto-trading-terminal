@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   createChart,
+  createSeriesMarkers,
   CandlestickSeries,
   HistogramSeries,
   LineSeries,
@@ -8,6 +9,9 @@ import {
   CrosshairMode,
   type IChartApi,
   type ISeriesApi,
+  type ISeriesMarkersPluginApi,
+  type SeriesMarker,
+  type Time,
   type UTCTimestamp,
 } from "lightweight-charts";
 import type { Candle } from "../lib/types";
@@ -71,6 +75,8 @@ interface IndSeriesSet {
   id: string;
   lines: ISeriesApi<"Line">[];
   histogram: ISeriesApi<"Histogram"> | null;
+  // markers plugin attached to the main candle series (used by fractals etc.)
+  markers: ISeriesMarkersPluginApi<Time> | null;
   // chart the series belong to (main or pane chart)
   isPaneChart: boolean;
 }
@@ -468,6 +474,7 @@ export function ChartPane({
         set.lines.forEach((s) => { try { targetChart.removeSeries(s); } catch { /* already gone */ } });
         if (set.histogram) { try { targetChart.removeSeries(set.histogram); } catch { /* already gone */ } }
       }
+      if (set.markers) { try { set.markers.detach(); } catch { /* already gone */ } }
       return false;
     });
 
@@ -498,6 +505,17 @@ export function ChartPane({
               value: p.value,
               color: p.color,
             })));
+          }
+          if (set.markers) {
+            const next: SeriesMarker<Time>[] = (output.markers ?? []).map((m) => ({
+              time: m.time as UTCTimestamp,
+              position: m.position,
+              shape: m.shape,
+              color: m.color,
+              text: m.text,
+              size: m.size,
+            }));
+            set.markers.setMarkers(next);
           }
         }
       } else {
@@ -536,7 +554,22 @@ export function ChartPane({
           })));
         }
 
-        indSeriesRef.current.push({ id: ind.id, lines: lineSeries, histogram: histSeries, isPaneChart });
+        // Marker indicators (e.g. fractals) attach the markers plugin to the main candle series.
+        // We deliberately attach to the candle/line/area series even for pane indicators —
+        // markers without a price coordinate don't make sense in a pane.
+        let markersApi: ISeriesMarkersPluginApi<Time> | null = null;
+        if (output.markers && output.markers.length > 0 && candleSeriesRef.current) {
+          markersApi = createSeriesMarkers(candleSeriesRef.current, output.markers.map((m) => ({
+            time: m.time as UTCTimestamp,
+            position: m.position,
+            shape: m.shape,
+            color: m.color,
+            text: m.text,
+            size: m.size,
+          })));
+        }
+
+        indSeriesRef.current.push({ id: ind.id, lines: lineSeries, histogram: histSeries, markers: markersApi, isPaneChart });
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

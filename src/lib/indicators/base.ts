@@ -1,6 +1,6 @@
 import type { Candle } from "../types";
 
-export type IndicatorKind = "sma" | "ema" | "rsi" | "macd" | "bollinger" | "stochastic" | "atr";
+export type IndicatorKind = "sma" | "ema" | "rsi" | "macd" | "bollinger" | "stochastic" | "atr" | "fractals";
 export type IndicatorRegion = "overlay" | "pane";
 
 export interface IndicatorDef {
@@ -20,7 +20,18 @@ export interface IndicatorLine {
   paneRelativeMax?: number;
 }
 
+/** Marker pinned to a bar — used for arrow-style indicators like fractals or signals. */
+export interface IndicatorMarker {
+  time: number;
+  position: "aboveBar" | "belowBar" | "inBar";
+  shape: "arrowUp" | "arrowDown" | "circle" | "square";
+  color: string;
+  text?: string;
+  size?: number;
+}
+
 export interface IndicatorOutput {
   lines: IndicatorLine[];
   histogram?: { time: number; value: number; color?: string }[];
+  markers?: IndicatorMarker[];
 }

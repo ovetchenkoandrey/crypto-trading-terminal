@@ -18,6 +18,7 @@ const DRAGGABLE_INDICATORS: { label: string; kind: string }[] = [
   { label: "Bollinger Bands", kind: "bollinger" },
   { label: "Stochastic", kind: "stochastic" },
   { label: "ATR", kind: "atr" },
+  { label: "Fractals", kind: "fractals" },
 ];
 
 const BOT_TEMPLATES: { label: string; kind: string; available: boolean }[] = [
