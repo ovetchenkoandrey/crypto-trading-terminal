@@ -12,7 +12,9 @@
     "build:electron": "tsc -p electron/tsconfig.json && node -e \"require('fs').writeFileSync('dist-electron/package.json', JSON.stringify({type:'commonjs'}))\"",
     "build": "npm run build:vite && npm run build:electron",
     "package": "npm run build && electron-packager . TradingApp --platform=win32 --arch=x64 --out=release --overwrite --prune=true --ignore=\"^/(electron|src|design|.claude|.git|release|build|.vscode|tsconfig|vite\\.config)\"",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "bybit-api": "^4.6.2",
@@ -34,6 +36,7 @@
     "electron-builder": "^25.0.5",
     "typescript": "^5.6.2",
     "vite": "^5.4.8",
+    "vitest": "^2.1.9",
     "wait-on": "^8.0.1"
   },
   "build": {

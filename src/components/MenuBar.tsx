@@ -97,13 +97,14 @@ export function MenuBar() {
             >
               <span
                 className={"mi" + (isOpen ? " active" : "")}
+                data-testid={`menu-${menu.id}`}
                 onClick={() => setOpen(isOpen ? null : menu.id)}
                 onMouseEnter={() => { if (open !== null) setOpen(menu.id); }}
               >
                 {menu.label}
               </span>
               {isOpen && (
-                <div className="menu-dropdown">
+                <div className="menu-dropdown" data-testid={`menu-${menu.id}-dropdown`}>
                   {menu.items.map((item, idx) => {
                     if (item.separator) return <div key={idx} className="menu-sep" />;
                     return (
