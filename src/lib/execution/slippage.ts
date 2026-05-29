@@ -18,9 +18,11 @@ export function applySlippage(
   side:     Side,
   qty:      number,
   ticker:   Ticker | undefined,
-  cfg:      SlippageSettings,
+  cfg:      SlippageSettings | undefined,
 ): number {
-  if (cfg.kind === "none" || refPrice <= 0) return refPrice;
+  // Defensive: if the slippage config hasn't migrated in yet (e.g. fresh boot from
+  // an old persist snapshot), just don't apply slippage at all.
+  if (!cfg || cfg.kind === "none" || refPrice <= 0) return refPrice;
 
   let bps = 0;
 

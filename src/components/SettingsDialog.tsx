@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Modal } from "./Modal";
 import { useStore } from "../lib/store";
 import type { Settings, FontScale, ChartType, HistoryDepth, PnlMode, HistoryProvider, SlippageKind } from "../lib/settings";
+import { DEFAULT_SETTINGS } from "../lib/settings";
 import { TIMEFRAMES } from "../lib/symbols";
 
 type TabKey =
@@ -312,7 +313,11 @@ function DrawingsTab({ draft, setDraft }: DraftProps) {
 }
 
 function PaperTab({ draft, setDraft }: DraftProps) {
-  const p = draft.paperTrading;
+  // Defensive: if the user is on a persisted store snapshot from before slippage
+  // existed, the deep-merge in store.ts will fill it in — but if anything else
+  // strips it (e.g. layout import from an old JSON), we still don't crash.
+  const slip = draft.paperTrading.slippage ?? DEFAULT_SETTINGS.paperTrading.slippage;
+  const p = { ...draft.paperTrading, slippage: slip };
   const upd = (patch: Partial<typeof p>) => setDraft((s) => ({ ...s, paperTrading: { ...s.paperTrading, ...patch } }));
   const resetAccount = useStore((s) => s.resetPaperAccount);
   return (

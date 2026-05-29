@@ -447,6 +447,16 @@ export const useStore = create<Store>()(
         venueMode: state.venueMode,
       }),
       version: 1,
+      // Default Zustand persist does a shallow merge — that drops any newly-added
+      // settings keys because the persisted `settings` object overwrites the current
+      // one wholesale. Deep-merge the `settings` slice so new fields fall back to
+      // their defaults instead of becoming undefined and crashing the UI.
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<PersistedSlice>;
+        const merged: Store = { ...current, ...p } as Store;
+        if (p.settings) merged.settings = mergeDeep(current.settings, p.settings);
+        return merged;
+      },
     },
   ),
 );
