@@ -76,18 +76,10 @@ export class BacktestVenueImpl implements ExecutionVenue {
     };
     this.orders.push(order);
 
-    // Market: execute on next bar's open (next call to onBar). We mimic real-life
-    // latency: a market order placed mid-bar fills on the next bar open price.
-    // For simplicity here, fill immediately at current bar close + slippage.
-    if (order.type === "market") {
-      const bar = this.opts.clock.current;
-      if (bar) {
-        const ref = bar.close;
-        const ticker: Ticker = this.barAsTicker(bar);
-        const fillPrice = applySlippage(ref, order.side, order.qty, ticker, this.opts.slippageCfg);
-        this.fillOrder(order, fillPrice);
-      }
-    }
+    // Market orders stay pending and fill at the NEXT bar's open (see onBar).
+    // Filling at the current bar's close would hand the strategy a price it
+    // already knew when it decided to trade — the decision is made once the bar
+    // has closed, so the earliest reachable price is the next open.
     return order;
   }
 
@@ -142,8 +134,19 @@ export class BacktestVenueImpl implements ExecutionVenue {
     // an infinite loop within a single bar.
     const snapshot = this.orders.filter((o) => o.status === "pending");
     const ticker = this.barAsTicker(bar);
+
+    // Market orders queued on an earlier bar fill at this bar's open, before any
+    // limit or stop is considered — that is the first price reachable after the
+    // decision was made.
+    const openTicker = this.barAsTicker(bar, bar.open);
     for (const o of snapshot) {
-      if (o.status !== "pending") continue;     // could be closed by a paired fill
+      if (o.status !== "pending" || o.type !== "market") continue;
+      const fill = applySlippage(bar.open, o.side, o.qty, openTicker, this.opts.slippageCfg);
+      this.fillOrder(o, fill);
+    }
+
+    for (const o of snapshot) {
+      if (o.status !== "pending" || o.type === "market") continue;   // could be closed by a paired fill
       const hit =
         o.type === "limit" && o.side === "buy"  && bar.low  <= o.price ? true :
         o.type === "limit" && o.side === "sell" && bar.high >= o.price ? true :
@@ -239,12 +242,13 @@ export class BacktestVenueImpl implements ExecutionVenue {
     return bar ? bar.time * 1000 : Date.now();
   }
 
-  private barAsTicker(bar: Candle): Ticker {
+  private barAsTicker(bar: Candle, price?: number): Ticker {
+    const px = price ?? bar.close;
     return {
       symbol:     this.opts.symbol,
-      lastPrice:  bar.close,
-      bid1:       bar.close,
-      ask1:       bar.close,
+      lastPrice:  px,
+      bid1:       px,
+      ask1:       px,
       change24h:  0,
       high24h:    bar.high,
       low24h:     bar.low,

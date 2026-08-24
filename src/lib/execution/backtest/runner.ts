@@ -7,6 +7,7 @@ import type { BotConfig } from "../../store";
 import type { Bot, BotContext } from "../../bots/base";
 import { getBotFactory } from "../../bots/registry";
 import { BacktestClock } from "./clock";
+import { CursorBarHistory } from "../../bots/history";
 import { BacktestVenueImpl } from "./BacktestVenue";
 import { computeStats, type BacktestStats, type EquitySample } from "./stats";
 import type { SlippageSettings } from "../../settings";
@@ -65,7 +66,8 @@ export async function runBacktest(
 
   const equity: EquitySample[] = [];
 
-  // Build a bot context that proxies to this isolated venue.
+  // Build a bot context that proxies to this isolated venue. History is bounded
+  // by the clock cursor, so the bot cannot read bars ahead of the current one.
   const bot: Bot = factory.create({ ...params.bot, symbol: params.symbol });
   const ctx: BotContext = {
     placeOrder: (req) => venue.placeOrder({ ...req, botId: params.bot.id }),
@@ -73,6 +75,11 @@ export async function runBacktest(
     cancelAllOrders: () => venue.cancelOrdersByBot(params.bot.id),
     getPendingOrders: () => venue.getOpenOrders().filter((o) => o.botId === params.bot.id),
     getTicker: (s) => venue.getTicker(s),
+    history: new CursorBarHistory(params.candles, () => clock.index),
+    getPositions: () => venue.getOpenPositions(),
+    getBalance: () => venue.getBalance(),
+    getTrades: () => venue.getHistory(),
+    now: () => (clock.current?.time ?? 0) * 1000,
   };
 
   venue.setListeners({
@@ -88,11 +95,14 @@ export async function runBacktest(
 
   while (!clock.done) {
     if (hooks.shouldStop?.()) break;
-    clock.step();
+    clock.step();   // matches pending orders against the new bar
 
-    const balance = venue.getBalance().available;
-    const equityVal = venue.getBalance().equity;
+    // The bar has closed and its orders are matched — only now may the strategy
+    // react. Anything it places from here fills on a later bar.
     const bar = clock.current;
+    if (bar) bot.onBar?.(ctx, bar, clock.index);
+
+    const { available: balance, equity: equityVal } = venue.getBalance();
     if (bar) equity.push({ time: bar.time, equity: equityVal });
 
     hooks.onProgress?.({

@@ -4,6 +4,7 @@ import { venue } from "../execution/router";
 import type { VenueOrder } from "../execution/types";
 import { getBotFactory } from "./registry";
 import type { Bot, BotContext } from "./base";
+import { CursorBarHistory } from "./history";
 import { logOk, logWarn, bus, emitBot } from "../eventBus";
 
 class BotManager {
@@ -70,12 +71,24 @@ class BotManager {
   }
 
   private contextFor(botId: string): BotContext {
+    const cfg = useStore.getState().botConfigs.find((b) => b.id === botId);
+    const symbol = cfg?.symbol ?? "";
     return {
       placeOrder: (req) => venue.placeOrder({ ...req, botId }),
       cancelOrder: (id, reason) => venue.cancelOrder(id, reason ?? `bot:${botId}`),
       cancelAllOrders: () => venue.cancelOrdersByBot(botId),
       getPendingOrders: (): VenueOrder[] => venue.getOpenOrders().filter((o) => o.botId === botId),
       getTicker: (symbol) => venue.getTicker(symbol),
+      // Live bars come from the store, keyed by the timeframe the chart is on.
+      // No cursor: everything already stored is in the past.
+      history: new CursorBarHistory(() => {
+        const st = useStore.getState();
+        return st.candles[`${symbol}.${st.timeframe}`] ?? [];
+      }),
+      getPositions: () => venue.getOpenPositions().filter((p) => p.botId === botId),
+      getBalance: () => venue.getBalance(),
+      getTrades: () => venue.getHistory().filter((t) => t.botId === botId),
+      now: () => Date.now(),
     };
   }
 }
