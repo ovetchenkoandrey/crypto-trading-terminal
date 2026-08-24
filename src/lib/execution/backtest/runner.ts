@@ -8,6 +8,7 @@ import type { Bot, BotContext } from "../../bots/base";
 import { getBotFactory } from "../../bots/registry";
 import { BacktestClock } from "./clock";
 import { CursorBarHistory } from "../../bots/history";
+import { BarAggregator } from "./aggregate";
 import { BacktestVenueImpl } from "./BacktestVenue";
 import { computeStats, type BacktestStats, type EquitySample } from "./stats";
 import type { SlippageSettings } from "../../settings";
@@ -43,6 +44,16 @@ export interface BacktestParams {
   feeRate:        number;
   slippageCfg:    SlippageSettings;
   costs:          BacktestCosts;
+  /**
+   * Length of a signal bar in seconds. `candles` stay the execution series —
+   * orders, stops and liquidation are checked against every one of them, while
+   * the strategy only wakes when a signal bar closes. Any multiple works: 900
+   * for M15, 1200 for M20, 3600 for H1.
+   *
+   * Omitted or 0 means the strategy reasons on the same bars it trades on,
+   * which leaves the intrabar order of events unknown.
+   */
+  signalIntervalSec?: number;
 }
 
 /** Names of the cost models a run actually applied, for the report. */
@@ -110,6 +121,12 @@ export async function runBacktest(
 
   const equity: EquitySample[] = [];
 
+  // Two-timeframe run: the strategy sees only closed signal bars, never the one
+  // still forming. With no signal interval it sees the execution series itself.
+  const signalIntervalSec = params.signalIntervalSec ?? 0;
+  const aggregator = signalIntervalSec > 0 ? new BarAggregator(signalIntervalSec) : null;
+  const signalBars: Candle[] = [];
+
   // Build a bot context that proxies to this isolated venue. History is bounded
   // by the clock cursor, so the bot cannot read bars ahead of the current one.
   const bot: Bot = factory.create({ ...params.bot, symbol: params.symbol });
@@ -119,7 +136,9 @@ export async function runBacktest(
     cancelAllOrders: () => venue.cancelOrdersByBot(params.bot.id),
     getPendingOrders: () => venue.getOpenOrders().filter((o) => o.botId === params.bot.id),
     getTicker: (s) => venue.getTicker(s),
-    history: new CursorBarHistory(params.candles, () => clock.index),
+    history: aggregator
+      ? new CursorBarHistory(() => signalBars)
+      : new CursorBarHistory(params.candles, () => clock.index),
     getPositions: () => venue.getOpenPositions(),
     getBalance: () => venue.getBalance(),
     getTrades: () => venue.getHistory(),
@@ -135,6 +154,7 @@ export async function runBacktest(
 
   // Advance to bar 0 so the bot has a price when it starts.
   clock.step();
+  if (aggregator && clock.current) aggregator.push(clock.current);
   bot.start(ctx);
 
   while (!clock.done) {
@@ -144,7 +164,17 @@ export async function runBacktest(
     // The bar has closed and its orders are matched — only now may the strategy
     // react. Anything it places from here fills on a later bar.
     const bar = clock.current;
-    if (bar) bot.onBar?.(ctx, bar, clock.index);
+    if (bar) {
+      if (aggregator) {
+        const closed = aggregator.push(bar);
+        if (closed) {
+          signalBars.push(closed);
+          bot.onBar?.(ctx, closed, signalBars.length - 1);
+        }
+      } else {
+        bot.onBar?.(ctx, bar, clock.index);
+      }
+    }
 
     const { available: balance, equity: equityVal } = venue.getBalance();
     if (bar) equity.push({ time: bar.time, equity: equityVal });

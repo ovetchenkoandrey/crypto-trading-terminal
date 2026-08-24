@@ -19,7 +19,9 @@ Usage:
   Ad-hoc run (ignored when --config is given):
   --symbol <sym>        e.g. BTCUSDT
   --market <name>       linear | spot (default: linear)
-  --interval <tf>       1m 5m 15m 1h 4h 1d ... (default: 1m)
+  --interval <tf>       execution bars: 1m 5m 15m 1h 4h 1d ... (default: 1m)
+  --signal <tf>         timeframe the strategy reasons on; must be a multiple
+                        of --interval (default: same as --interval)
   --from <when>         YYYY-MM | YYYY-MM-DD | ISO | epoch seconds (required)
   --to <when>           same shapes; a bare month/day means its last second
   --bot <kind>          ${Object.keys(BOT_FACTORIES).join(" | ")}
@@ -148,6 +150,8 @@ function parseArgs(argv: string[]): Args {
     ad.market = market as RunDecl["market"];
     ad.symbol = flags.get("symbol");
     ad.interval = flags.get("interval") ?? "1m";
+    const signal = flags.get("signal");
+    if (signal) ad.signalInterval = signal;
     ad.from = flags.get("from");
     ad.to = flags.get("to");
     ad.bot = { kind: flags.get("bot"), params: parseParams(flags.get("params")) };

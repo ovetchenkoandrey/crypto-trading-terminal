@@ -18,7 +18,7 @@ import { getInstrumentRules, type InstrumentRules } from "../execution/instrumen
 import type { FundingRateEvent } from "../execution/funding";
 import type { MarginSettings } from "../execution/backtest/BacktestVenue";
 import type { BacktestCosts } from "../execution/backtest/runner";
-import { parseInterval, type DataInterval } from "../data/interval.ts";
+import { parseInterval, intervalSeconds, type DataInterval } from "../data/interval.ts";
 import { normalizeSymbol, type Market } from "../data/paths.ts";
 import { dayStartSec, isMonthKey, monthEndSec, monthStartSec } from "../data/months.ts";
 
@@ -49,6 +49,13 @@ export interface RunDecl {
   market?: Market;
   symbol?: string;
   interval?: string;
+  /**
+   * Timeframe the strategy reasons on. `interval` stays the execution series:
+   * orders, stops and liquidation are checked against every bar of it, while
+   * the strategy only wakes when a signal bar closes. Must be a whole multiple
+   * of `interval`. Absent means signals and execution share the same bars.
+   */
+  signalInterval?: string;
   from?: string | number;
   to?: string | number;
   initialBalance?: number;
@@ -80,6 +87,8 @@ export interface RunSpec {
   market: Market;
   symbol: string;
   interval: DataInterval;
+  /** Signal bar length in seconds; 0 when signals run on execution bars. */
+  signalIntervalSec: number;
   /** Inclusive UTC-second bounds of the bars to feed the engine. */
   fromSec: number;
   toSec: number;
@@ -188,6 +197,22 @@ export function resolveRunSpec(decl: RunDecl, where = "run"): RunSpec {
   const stress = decl.stressSlippage ?? null;
   if (stress !== null && (!Number.isFinite(stress) || stress <= 0)) fail(where, "stressSlippage must be a positive number or null");
 
+  // Signal timeframe must be a whole multiple of the execution one, otherwise
+  // signal bars would straddle execution bars and the aggregation would drift.
+  let signalIntervalSec = 0;
+  if (decl.signalInterval) {
+    const signal = parseInterval(decl.signalInterval);
+    const execSec = intervalSeconds(interval);
+    signalIntervalSec = intervalSeconds(signal);
+    if (signalIntervalSec < execSec) {
+      fail(where, `signalInterval ${signal} is shorter than the execution interval ${interval}`);
+    }
+    if (signalIntervalSec % execSec !== 0) {
+      fail(where, `signalInterval ${signal} is not a whole multiple of ${interval}`);
+    }
+    if (signalIntervalSec === execSec) signalIntervalSec = 0;
+  }
+
   const windowDays = decl.window?.days ?? DEFAULT_WINDOW.days;
   const stepDays = decl.window?.stepDays ?? DEFAULT_WINDOW.stepDays;
   if (!(windowDays > 0) || !(stepDays > 0)) fail(where, "window.days and window.stepDays must be positive");
@@ -205,6 +230,7 @@ export function resolveRunSpec(decl: RunDecl, where = "run"): RunSpec {
     market,
     symbol,
     interval,
+    signalIntervalSec,
     fromSec,
     toSec,
     initialBalance,

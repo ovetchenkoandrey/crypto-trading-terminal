@@ -113,6 +113,7 @@ export async function runFromSpec(spec: RunSpec, opts: CliRunOptions = {}): Prom
       feeRate: resolved.feeRate,
       slippageCfg: resolved.slippage,
       costs: resolved.costs,
+      signalIntervalSec: spec.signalIntervalSec,
     },
     { onProgress: opts.onProgress ? (p) => opts.onProgress!({ ...p, spec, stress: false }) : undefined },
   );
@@ -129,6 +130,7 @@ export async function runFromSpec(spec: RunSpec, opts: CliRunOptions = {}): Prom
         feeRate: stressed.feeRate,
         slippageCfg: stressed.slippage,
         costs: stressed.costs,
+        signalIntervalSec: spec.signalIntervalSec,
       },
       { onProgress: opts.onProgress ? (p) => opts.onProgress!({ ...p, spec, stress: true }) : undefined },
     );
