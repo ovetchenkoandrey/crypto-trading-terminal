@@ -1,0 +1,38 @@
+{
+  "name": "grid-btc-q2-2026",
+  "_comment": [
+    "Pipeline demo, not a strategy proposal. The grid bounds are the high and low of",
+    "2026-01..2026-02, i.e. the two months BEFORE the tested window — picking them from",
+    "the tested window itself would fit the parameters to the answer and any 'PASSED'",
+    "verdict would be manufactured. See docs/strategy-search.md, 'Главный риск проекта'.",
+    "Every key here is optional except symbol, from, to, bot.kind and costs."
+  ],
+  "defaults": {
+    "market": "linear",
+    "symbol": "BTCUSDT",
+    "interval": "1m",
+    "from": "2026-03",
+    "to": "2026-06",
+    "initialBalance": 1000,
+    "stressSlippage": 2,
+    "window": { "days": 30, "stepDays": 7 },
+    "bot": {
+      "kind": "grid",
+      "params": { "lowPrice": 59800, "highPrice": 97900, "qtyPerLevel": 0.001 }
+    },
+    "costs": {
+      "fees": "bybit-linear",
+      "slippage": { "kind": "fixed_bps", "bps": 5 },
+      "slippageContext": true,
+      "rejection": true,
+      "rules": true,
+      "funding": true,
+      "margin": true
+    }
+  },
+  "runs": [
+    { "name": "grid-10", "bot": { "params": { "levels": 10 } } },
+    { "name": "grid-20", "bot": { "params": { "levels": 20 } } },
+    { "name": "grid-40", "bot": { "params": { "levels": 40 } } }
+  ]
+}
