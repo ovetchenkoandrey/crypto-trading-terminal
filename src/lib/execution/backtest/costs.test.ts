@@ -469,3 +469,114 @@ describe("rejected limits stay in the book", () => {
     expect(venue.rejectedCount).toBe(0);   // not a rejection, just no fill yet
   });
 });
+
+describe("margin and liquidation", () => {
+  const MARGIN = { leverage: 5, maintenanceMarginRate: 0.005 };
+
+  it("refuses an order beyond the leverage cap", () => {
+    const bars = flatBars(3, 100);
+    const { clock, venue } = makeVenue(bars, { margin: MARGIN });
+
+    clock.step();
+    // Equity 10 000 at 5x allows 50 000 notional; 600 x 100 is 60 000.
+    const order = venue.placeOrder({ symbol: "BTCUSDT", side: "buy", type: "market", price: 0, qty: 600 });
+    clock.step();
+
+    expect(order.status).toBe("cancelled");
+    expect(venue.getOpenPositions()).toHaveLength(0);
+  });
+
+  it("allows an order inside the cap", () => {
+    const bars = flatBars(3, 100);
+    const { clock, venue } = makeVenue(bars, { margin: MARGIN });
+
+    clock.step();
+    venue.placeOrder({ symbol: "BTCUSDT", side: "buy", type: "market", price: 0, qty: 400 });
+    clock.step();
+
+    expect(venue.getOpenPositions()).toHaveLength(1);
+  });
+
+  it("liquidates when equity falls under the maintenance floor", () => {
+    // 400 long at 100 on 10 000 equity: a drop to 75 wipes it out.
+    const bars: Candle[] = [
+      { time: 0,   open: 100, high: 100, low: 100, close: 100, volume: 10 },
+      { time: 60,  open: 100, high: 100, low: 100, close: 100, volume: 10 },
+      { time: 120, open:  95, high:  95, low:  74, close:  95, volume: 10 },
+    ];
+    const { clock, venue } = makeVenue(bars, { margin: MARGIN });
+
+    clock.step();
+    venue.placeOrder({ symbol: "BTCUSDT", side: "buy", type: "market", price: 0, qty: 400 });
+    clock.step();
+    clock.step();
+
+    expect(venue.liquidations).toBe(1);
+    expect(venue.getOpenPositions()).toHaveLength(0);
+    expect(venue.getHistory()).toHaveLength(1);
+  });
+
+  it("liquidates on an intrabar low even when the bar closes back above water", () => {
+    // Close recovers to 100, but the wick to 74 already killed the account.
+    const bars: Candle[] = [
+      { time: 0,   open: 100, high: 100, low: 100, close: 100, volume: 10 },
+      { time: 60,  open: 100, high: 100, low: 100, close: 100, volume: 10 },
+      { time: 120, open: 100, high: 101, low:  74, close: 100, volume: 10 },
+    ];
+    const { clock, venue } = makeVenue(bars, { margin: MARGIN });
+
+    clock.step();
+    venue.placeOrder({ symbol: "BTCUSDT", side: "buy", type: "market", price: 0, qty: 400 });
+    clock.step();
+    clock.step();
+
+    expect(venue.liquidations).toBe(1);
+  });
+
+  it("cancels resting orders on liquidation", () => {
+    const bars: Candle[] = [
+      { time: 0,   open: 100, high: 100, low: 100, close: 100, volume: 10 },
+      { time: 60,  open: 100, high: 100, low: 100, close: 100, volume: 10 },
+      { time: 120, open: 100, high: 101, low:  74, close: 100, volume: 10 },
+    ];
+    const { clock, venue } = makeVenue(bars, { margin: MARGIN });
+
+    clock.step();
+    venue.placeOrder({ symbol: "BTCUSDT", side: "buy", type: "market", price: 0, qty: 400 });
+    clock.step();
+    const resting = venue.placeOrder({ symbol: "BTCUSDT", side: "buy", type: "limit", price: 50, qty: 1 });
+    clock.step();
+
+    expect(venue.liquidations).toBe(1);
+    expect(resting.status).toBe("cancelled");
+  });
+
+  it("does not liquidate a comfortably funded position", () => {
+    const bars: Candle[] = [
+      { time: 0,   open: 100, high: 100, low: 100, close: 100, volume: 10 },
+      { time: 60,  open: 100, high: 100, low: 100, close: 100, volume: 10 },
+      { time: 120, open:  99, high: 100, low:  98, close:  99, volume: 10 },
+    ];
+    const { clock, venue } = makeVenue(bars, { margin: MARGIN });
+
+    clock.step();
+    venue.placeOrder({ symbol: "BTCUSDT", side: "buy", type: "market", price: 0, qty: 10 });
+    clock.step();
+    clock.step();
+
+    expect(venue.liquidations).toBe(0);
+    expect(venue.getOpenPositions()).toHaveLength(1);
+  });
+
+  it("ignores margin entirely when not configured", () => {
+    const bars = flatBars(3, 100);
+    const { clock, venue } = makeVenue(bars);
+
+    clock.step();
+    venue.placeOrder({ symbol: "BTCUSDT", side: "buy", type: "market", price: 0, qty: 10_000 });
+    clock.step();
+
+    expect(venue.getOpenPositions()).toHaveLength(1);
+    expect(venue.liquidations).toBe(0);
+  });
+});

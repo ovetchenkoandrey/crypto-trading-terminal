@@ -16,6 +16,7 @@ import type { FeeSettings } from "../fees";
 import type { RejectionSettings } from "../rejection";
 import type { InstrumentRules } from "../instrumentRules";
 import type { FundingRateEvent } from "../funding";
+import type { MarginSettings } from "./BacktestVenue";
 import type { PaperTrade, PaperPosition, PaperOrder } from "../../store";
 
 /**
@@ -31,6 +32,7 @@ export interface BacktestCosts {
   rejection?:       RejectionSettings;
   rules?:           InstrumentRules;
   funding?:         { events: FundingRateEvent[] };
+  margin?:          MarginSettings;
 }
 
 export interface BacktestParams {
@@ -51,6 +53,7 @@ export function describeCosts(costs: BacktestCosts): string[] {
   if (costs.rejection)       on.push("order rejection");
   if (costs.rules)           on.push("instrument rules");
   if (costs.funding)         on.push("funding");
+  if (costs.margin)          on.push(`margin ${costs.margin.leverage}x`);
   return on;
 }
 
@@ -70,6 +73,8 @@ export interface BacktestResult {
   funding: number;
   /** Orders dropped before filling: rejection model or instrument rules. */
   rejected: number;
+  /** Times the account was liquidated. Any value above zero invalidates the run. */
+  liquidations: number;
   stats:   BacktestStats;
   trades:  PaperTrade[];
   positions: PaperPosition[];   // any still open at the end
@@ -165,6 +170,7 @@ export async function runBacktest(
     costsApplied: describeCosts(params.costs),
     funding:      venue.fundingTotal,
     rejected:     venue.rejectedCount,
+    liquidations: venue.liquidations,
     stats,
     trades:    venue.getHistory(),
     positions: venue.getOpenPositions(),

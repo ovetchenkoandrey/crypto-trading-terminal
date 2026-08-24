@@ -51,6 +51,18 @@ export interface BacktestVenueOptions {
   rules?:          InstrumentRules;
   /** Perpetual funding settlements applied while a position is open. */
   funding?:        { events: FundingRateEvent[] };
+  /** Leverage cap and liquidation. Without it a run can trade money it lacks. */
+  margin?:         MarginSettings;
+}
+
+export interface MarginSettings {
+  /** Largest notional the account may hold, as a multiple of equity. */
+  leverage: number;
+  /**
+   * Equity floor as a fraction of notional. Below it the exchange closes the
+   * position. Bybit charges roughly 0.5% on small BTCUSDT positions.
+   */
+  maintenanceMarginRate: number;
 }
 
 export interface BacktestVenueListeners {
@@ -68,6 +80,8 @@ export class BacktestVenueImpl implements ExecutionVenue {
   fundingTotal = 0;
   /** Orders dropped by the rejection model, for the run report. */
   rejectedCount = 0;
+  /** How many times the account was liquidated during the run. */
+  liquidations = 0;
   private listeners: BacktestVenueListeners = {};
   private unsub: (() => void) | null = null;
   private readonly fees: FeeSettings;
@@ -120,6 +134,16 @@ export class BacktestVenueImpl implements ExecutionVenue {
         price = n.price;
         allowed = n.ok;
       }
+    }
+
+    // Leverage cap. Reduce-only shrinks exposure and is always allowed —
+    // blocking it would trap a position the account can no longer carry.
+    const margin = this.opts.margin;
+    if (margin && allowed && !req.reduceOnly) {
+      const ref = req.type === "market" ? (this.opts.clock.current?.close ?? price) : price;
+      const equity = this.balance + this.unrealisedPnl();
+      const openNotional = this.positions.reduce((s, p) => s + p.qty * ref, 0);
+      if (equity <= 0 || openNotional + qty * ref > equity * margin.leverage) allowed = false;
     }
 
     const order: PaperOrder = {
@@ -263,6 +287,71 @@ export class BacktestVenueImpl implements ExecutionVenue {
       if (this.rejected(o, fill, bar)) continue;
       this.fillOrder(o, fill);
     }
+
+    this.checkLiquidation(bar);
+  }
+
+  /**
+   * Force-closes everything when equity falls under the maintenance floor.
+   *
+   * Checked against the worst price inside the bar, not its close: an account
+   * wiped out intrabar does not recover because the bar happened to close back
+   * above water. Without this a strategy keeps trading through a balance it
+   * would no longer have — the single largest way a perpetual backtest lies.
+   */
+  private checkLiquidation(bar: Candle): void {
+    const m = this.opts.margin;
+    if (!m || this.positions.length === 0) return;
+
+    let worstEquity = Infinity;
+    let worstPrice = bar.close;
+    let notionalAtWorst = 0;
+    for (const price of [bar.low, bar.high]) {
+      let unrealised = 0;
+      let notional = 0;
+      for (const p of this.positions) {
+        if (p.symbol !== this.opts.symbol) continue;
+        const dir = p.side === "buy" ? 1 : -1;
+        unrealised += (price - p.entryPrice) * p.qty * dir;
+        notional   += p.qty * price;
+      }
+      const equity = this.balance + unrealised;
+      if (equity < worstEquity) {
+        worstEquity = equity;
+        worstPrice = price;
+        notionalAtWorst = notional;
+      }
+    }
+
+    if (worstEquity > notionalAtWorst * m.maintenanceMarginRate) return;
+
+    for (const p of [...this.positions]) {
+      if (p.symbol !== this.opts.symbol) continue;
+      const dir = p.side === "buy" ? 1 : -1;
+      const gross = (worstPrice - p.entryPrice) * p.qty * dir;
+      const exitFee = computeOrderFee(worstPrice, p.qty, "taker", this.fees);
+      const entryFee = this.entryFees.get(p.id) ?? 0;
+      this.balance += gross - exitFee;
+      this.history.push({
+        id: uid("trd"),
+        ts: this.nowMs(),
+        symbol: p.symbol,
+        side:   p.side as Side,
+        entryPrice: p.entryPrice,
+        exitPrice:  worstPrice,
+        qty:        p.qty,
+        pnl:        gross - exitFee - entryFee,
+        botId:      p.botId,
+      });
+      this.entryFees.delete(p.id);
+    }
+    this.positions = [];
+
+    // The exchange pulls resting orders along with the position.
+    for (const o of this.orders) {
+      if (o.status === "pending") { o.status = "cancelled"; this.forget(o.id); }
+    }
+    this.liquidations += 1;
   }
 
   /** Base slippage, scaled by time-of-day and volatility when configured. */
