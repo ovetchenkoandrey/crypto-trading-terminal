@@ -1,5 +1,7 @@
 import type { Candle } from "../types";
 import type { IndicatorDef, IndicatorOutput } from "./base";
+import { toLinePoints } from "./base";
+import { bollinger, closes } from "./core";
 
 export const def: IndicatorDef = {
   kind: "bollinger",
@@ -13,33 +15,13 @@ export const def: IndicatorDef = {
     const mult = Number(params.stddev) || 2;
     const color = params.color as string || def.defaultColor;
 
-    const middle: { time: number; value: number }[] = [];
-    const upper: { time: number; value: number }[] = [];
-    const lower: { time: number; value: number }[] = [];
-
-    for (let i = period - 1; i < candles.length; i++) {
-      let sum = 0;
-      for (let j = i - period + 1; j <= i; j++) sum += candles[j].close;
-      const sma = sum / period;
-
-      let variance = 0;
-      for (let j = i - period + 1; j <= i; j++) {
-        const diff = candles[j].close - sma;
-        variance += diff * diff;
-      }
-      const sd = Math.sqrt(variance / period);
-      const t = candles[i].time;
-
-      middle.push({ time: t, value: sma });
-      upper.push({ time: t, value: sma + mult * sd });
-      lower.push({ time: t, value: sma - mult * sd });
-    }
+    const bands = bollinger(closes(candles), period, mult);
 
     return {
       lines: [
-        { name: `BB Mid(${period})`, color, data: middle },
-        { name: `BB Up(${period})`, color: color + "aa", data: upper },
-        { name: `BB Lo(${period})`, color: color + "aa", data: lower },
+        { name: `BB Mid(${period})`, color, data: toLinePoints(candles, bands.mid) },
+        { name: `BB Up(${period})`, color: color + "aa", data: toLinePoints(candles, bands.upper) },
+        { name: `BB Lo(${period})`, color: color + "aa", data: toLinePoints(candles, bands.lower) },
       ],
     };
   },

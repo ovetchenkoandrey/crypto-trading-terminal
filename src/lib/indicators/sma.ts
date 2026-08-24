@@ -1,5 +1,7 @@
 import type { Candle } from "../types";
 import type { IndicatorDef, IndicatorOutput } from "./base";
+import { toLinePoints } from "./base";
+import { closes, sma } from "./core";
 
 export const def: IndicatorDef = {
   kind: "sma",
@@ -10,13 +12,7 @@ export const def: IndicatorDef = {
 
   compute(candles: Candle[], params: Record<string, number | string>): IndicatorOutput {
     const period = Number(params.period) || 20;
-    const data: { time: number; value: number }[] = [];
-
-    for (let i = period - 1; i < candles.length; i++) {
-      let sum = 0;
-      for (let j = i - period + 1; j <= i; j++) sum += candles[j].close;
-      data.push({ time: candles[i].time, value: sum / period });
-    }
+    const data = toLinePoints(candles, sma(closes(candles), period));
 
     return {
       lines: [{ name: `SMA(${period})`, color: params.color as string || def.defaultColor, data }],

@@ -35,3 +35,13 @@ export interface IndicatorOutput {
   histogram?: { time: number; value: number; color?: string }[];
   markers?: IndicatorMarker[];
 }
+
+/** Drops the leading `null`s of a core series and pins the rest to bar times. */
+export function toLinePoints(candles: Candle[], series: (number | null)[]): { time: number; value: number }[] {
+  const out: { time: number; value: number }[] = [];
+  for (let i = 0; i < candles.length; i++) {
+    const v = series[i];
+    if (v !== null && v !== undefined) out.push({ time: candles[i].time, value: v });
+  }
+  return out;
+}
