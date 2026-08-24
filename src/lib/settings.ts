@@ -1,5 +1,10 @@
 // Centralised app settings — persisted in the Zustand store via `partialize`.
 
+import { DEFAULT_FEE_SETTINGS, type FeeSettings } from "./execution/fees";
+import { DEFAULT_SLIPPAGE_CONTEXT, type SlippageContextSettings } from "./execution/slippage";
+import { DEFAULT_REJECTION_SETTINGS, type RejectionSettings } from "./execution/rejection";
+import { DEFAULT_FUNDING_INTERVAL_MINUTES, TYPICAL_FUNDING_RATE } from "./execution/funding";
+
 export type FontScale = "sm" | "md" | "lg";
 export type ChartType = "candle" | "line" | "area";
 export type HistoryDepth = 200 | 500 | 1000;
@@ -46,15 +51,27 @@ export interface SlippageSettings {
   spreadPct:   number;     // for kind=spread_pct — fraction of bid-ask spread (0..1)
   impactK:     number;     // for kind=volume_impact — bps multiplier
   impactRefQty:number;     // reference qty for sqrt scaling
+  // Added later — optional so old persist snapshots keep type-checking.
+  context?:    SlippageContextSettings;   // hour-of-day / weekend / volatility multipliers
+}
+
+export interface FundingSettings {
+  enabled:         boolean;
+  intervalMinutes: number;    // BTCUSDT 480; some alts 240 or 60 — read per symbol
+  fallbackRate:    number;    // used when the funding history has gaps
 }
 
 export interface PaperTradingSettings {
   initialBalance:    number;
-  feeRate:           number;       // 0.001 = 0.1%
+  feeRate:           number;       // 0.001 = 0.1% — legacy flat rate, superseded by `fees`
   pnlMode:           PnlMode;
   slippage:          SlippageSettings;
   confirmThresholdLow:  number;    // < this → no confirm (USDT). Set 0 to always confirm.
   confirmThresholdHigh: number;    // ≥ this → modal confirm. Between low and high → undo toast.
+  // Added later — optional so old persist snapshots keep type-checking.
+  fees?:      FeeSettings;
+  rejection?: RejectionSettings;
+  funding?:   FundingSettings;
 }
 
 export interface DangerousShortcutsSettings {
@@ -136,9 +153,17 @@ export const DEFAULT_SETTINGS: Settings = {
       spreadPct:    0.5,
       impactK:      5,
       impactRefQty: 1,
+      context:      { ...DEFAULT_SLIPPAGE_CONTEXT, deadHoursUtc: [...DEFAULT_SLIPPAGE_CONTEXT.deadHoursUtc] },
     },
     confirmThresholdLow:  100,
     confirmThresholdHigh: 1000,
+    fees:      { ...DEFAULT_FEE_SETTINGS },
+    rejection: { ...DEFAULT_REJECTION_SETTINGS, stressWindows: [] },
+    funding: {
+      enabled:         true,
+      intervalMinutes: DEFAULT_FUNDING_INTERVAL_MINUTES,
+      fallbackRate:    TYPICAL_FUNDING_RATE,
+    },
   },
   dangerous: {
     shiftClickOrderbook: false,
