@@ -175,6 +175,7 @@ class PaperTradingEngine {
       const trade: PaperTrade = {
         id: uid("trd"),
         ts: Date.now(),
+        entryTs: opposite.openedTs,
         symbol: order.symbol,
         side: opposite.side,
         entryPrice: opposite.entryPrice,

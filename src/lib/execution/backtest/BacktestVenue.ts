@@ -335,6 +335,7 @@ export class BacktestVenueImpl implements ExecutionVenue {
       this.history.push({
         id: uid("trd"),
         ts: this.nowMs(),
+        entryTs: p.openedTs,
         symbol: p.symbol,
         side:   p.side as Side,
         entryPrice: p.entryPrice,
@@ -473,6 +474,7 @@ export class BacktestVenueImpl implements ExecutionVenue {
       this.history.push({
         id: uid("trd"),
         ts: this.nowMs(),
+        entryTs: opposite.openedTs,
         symbol: order.symbol,
         side:   opposite.side as Side,
         entryPrice: opposite.entryPrice,

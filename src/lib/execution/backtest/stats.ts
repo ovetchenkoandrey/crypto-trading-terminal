@@ -54,10 +54,12 @@ export function computeStats(
     if (ddPct > maxDdPct) maxDdPct = ddPct;
   }
 
-  // Average hold time. We have no separate openedTs in PaperTrade, so the
-  // runner must store something — approximate by trade.ts spacing if needed.
-  // For now treat as 0 unless callers supply augmented trades.
-  const avgHoldSec = 0;
+  // Average hold time from the trade's own open and close stamps. Trades
+  // without an entry stamp are skipped rather than counted as instant.
+  const held = trades.filter((t) => Number.isFinite(t.entryTs) && t.entryTs > 0);
+  const avgHoldSec = held.length
+    ? held.reduce((s, t) => s + Math.max(0, t.ts - t.entryTs), 0) / held.length / 1000
+    : 0;
 
   // Daily Sharpe (crude): bucket equity by day, take pct returns, mean/std.
   const daily = bucketByDay(equity);

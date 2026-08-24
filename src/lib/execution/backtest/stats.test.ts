@@ -3,8 +3,8 @@ import { computeStats } from "./stats";
 import type { PaperTrade } from "../../store";
 import type { EquitySample } from "./stats";
 
-const trade = (pnl: number, ts = 0): PaperTrade => ({
-  id: String(ts) + "-" + pnl, ts, symbol: "BTCUSDT", side: "buy",
+const trade = (pnl: number, ts = 0, entryTs = ts): PaperTrade => ({
+  id: String(ts) + "-" + pnl, ts, entryTs, symbol: "BTCUSDT", side: "buy",
   entryPrice: 100, exitPrice: 100 + pnl, qty: 1, pnl,
 });
 
@@ -92,5 +92,28 @@ describe("max drawdown percentage", () => {
 
     expect(stats.maxDrawdown).toBeCloseTo(200, 9);
     expect(stats.maxDrawdownPct).toBeCloseTo(20, 9);
+  });
+});
+
+describe("average hold time", () => {
+  it("averages the span between entry and exit", () => {
+    const trades = [
+      trade(10, 120_000, 60_000),    // 60s
+      trade(-5, 300_000, 180_000),   // 120s
+    ];
+
+    expect(computeStats(1000, trades, []).avgHoldSec).toBeCloseTo(90, 9);
+  });
+
+  it("skips trades without an entry stamp rather than counting them as instant", () => {
+    // Zero means "not recorded" — a real trade never opens at the epoch.
+    const withStamp = trade(10, 120_000, 60_000);
+    const without = { ...trade(5, 120_000), entryTs: 0 };
+
+    expect(computeStats(1000, [withStamp, without], []).avgHoldSec).toBeCloseTo(60, 9);
+  });
+
+  it("is zero with no trades", () => {
+    expect(computeStats(1000, [], []).avgHoldSec).toBe(0);
   });
 });

@@ -94,7 +94,10 @@ export interface PaperPosition {
 
 export interface PaperTrade {
   id: string;
+  /** Close time, epoch ms. */
   ts: number;
+  /** Open time of the closed position, epoch ms. Needed to draw the trade. */
+  entryTs: number;
   symbol: string;
   side: Side;
   entryPrice: number;
