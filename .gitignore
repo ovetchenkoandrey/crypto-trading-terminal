@@ -23,3 +23,7 @@ Thumbs.db
 
 # build artifacts
 *.spec
+
+# local datasets (candles, funding, quality reports)
+# leading slash matters: a bare "data/" would also ignore src/lib/data/
+/data/

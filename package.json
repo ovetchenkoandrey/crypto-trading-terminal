@@ -14,7 +14,9 @@
     "package": "npm run build && electron-packager . TradingApp --platform=win32 --arch=x64 --out=release --overwrite --prune=true --ignore=\"^/(electron|src|design|.claude|.git|release|build|.vscode|tsconfig|vite\\.config)\"",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "data:fetch": "node scripts/fetchData.ts",
+    "data:validate": "node scripts/fetchData.ts --validate-only"
   },
   "dependencies": {
     "bybit-api": "^4.6.2",
