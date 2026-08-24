@@ -13,20 +13,44 @@ import type {
 } from "../types";
 import type { Side, Ticker, PaperOrder, PaperPosition, PaperTrade } from "../../store";
 import type { Candle } from "../../types";
-import { applySlippage } from "../slippage";
+import { applySlippage, applySlippageWithContext } from "../slippage";
+import type { SlippageContextSettings } from "../slippage";
 import type { SlippageSettings } from "../../settings";
+import { computeOrderFee, feeSettingsFromFlatRate, normalizeFeeSettings } from "../fees";
+import type { FeeRole, FeeSettings } from "../fees";
+import { evaluateRejection } from "../rejection";
+import type { RejectionSettings } from "../rejection";
+import { normalizeOrder } from "../instrumentRules";
+import type { InstrumentRules } from "../instrumentRules";
+import type { FundingRateEvent } from "../funding";
 import { BacktestClock } from "./clock";
 
 function uid(prefix: string): string {
   return prefix + "-" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
+/**
+ * Cost models are opt-in: a model left undefined is not applied at all, rather
+ * than silently defaulting to its own settings. A backtest has to declare the
+ * costs it runs under — switching them on by default would quietly change what
+ * previous runs meant.
+ */
 export interface BacktestVenueOptions {
   symbol:        string;       // single-symbol backtest
   initialBalance: number;
-  feeRate:        number;       // 0.001 = 0.1%
+  feeRate:        number;       // 0.001 = 0.1% — used when `fees` is absent
   slippageCfg:    SlippageSettings;
   clock:          BacktestClock;
+  /** Split maker/taker rates. Falls back to the flat feeRate above. */
+  fees?:           FeeSettings;
+  /** Time-of-day and volatility multipliers on top of the base slippage. */
+  slippageContext?: SlippageContextSettings;
+  /** Order rejection (thin book, price band, stress windows). */
+  rejection?:      RejectionSettings;
+  /** Quantisation and minimum-size rules of the traded instrument. */
+  rules?:          InstrumentRules;
+  /** Perpetual funding settlements applied while a position is open. */
+  funding?:        { events: FundingRateEvent[] };
 }
 
 export interface BacktestVenueListeners {
@@ -40,11 +64,22 @@ export class BacktestVenueImpl implements ExecutionVenue {
   positions: PaperPosition[] = [];
   orders:    PaperOrder[] = [];
   history:   PaperTrade[] = [];
+  /** Funding paid (negative) or received (positive) over the run. */
+  fundingTotal = 0;
+  /** Orders dropped by the rejection model, for the run report. */
+  rejectedCount = 0;
   private listeners: BacktestVenueListeners = {};
   private unsub: (() => void) | null = null;
+  private readonly fees: FeeSettings;
+  /** Orders that take liquidity — market, stop, and marketable limits. */
+  private takesLiquidity = new Set<string>();
+  private lastBarTime: number | null = null;
 
   constructor(private opts: BacktestVenueOptions) {
     this.balance = opts.initialBalance;
+    this.fees = opts.fees
+      ? normalizeFeeSettings(opts.fees)
+      : feeSettingsFromFlatRate(opts.feeRate);
   }
 
   /** Register fill listener — used by the bot manager to forward to bots. */
@@ -63,18 +98,61 @@ export class BacktestVenueImpl implements ExecutionVenue {
   }
 
   placeOrder(req: PlaceOrderRequest): VenueOrder {
+    const rules = this.opts.rules;
+    let qty = req.qty;
+    let price = req.price;
+    let allowed = true;
+
+    if (rules) {
+      if (req.type === "market") {
+        // A market order's price field is only a reference; validate its size
+        // against the current bar instead of quantising a price nobody uses.
+        const ref = this.opts.clock.current?.close ?? req.price;
+        const n = normalizeOrder({ qty, price: ref }, rules, {});
+        qty = n.qty;
+        allowed = n.ok;
+      } else {
+        const n = normalizeOrder({ qty, price }, rules, { side: req.side });
+        qty = n.qty;
+        price = n.price;
+        allowed = n.ok;
+      }
+    }
+
     const order: PaperOrder = {
       id: uid("ord"),
       ts: this.nowMs(),
       symbol: req.symbol,
       side:   req.side,
       type:   req.type,
-      price:  req.price,
-      qty:    req.qty,
+      price,
+      qty,
       status: "pending",
       botId:  req.botId,
     };
     this.orders.push(order);
+
+    // Below the exchange minimum, or not on the size step — the venue would
+    // never have accepted it, so neither do we.
+    if (!allowed) {
+      order.status = "cancelled";
+      this.rejectedCount += 1;
+      return order;
+    }
+
+    // Fee role is fixed at placement. A limit priced through the current market
+    // crosses the book immediately and pays the taker rate; assuming every
+    // limit is a maker is the optimistic mistake that flatters grid strategies.
+    if (order.type === "market" || order.type === "stop") {
+      this.takesLiquidity.add(order.id);
+    } else if (order.type === "limit") {
+      const ref = this.opts.clock.current?.close;
+      const marketable = ref !== undefined && (
+        (order.side === "buy"  && order.price >= ref) ||
+        (order.side === "sell" && order.price <= ref)
+      );
+      if (marketable) this.takesLiquidity.add(order.id);
+    }
 
     // Market orders stay pending and fill at the NEXT bar's open (see onBar).
     // Filling at the current bar's close would hand the strategy a price it
@@ -132,6 +210,8 @@ export class BacktestVenueImpl implements ExecutionVenue {
     // the bot in reaction to a fill (via onOrderFilled) won't be matched until
     // the NEXT bar — otherwise grid-style strategies would feed themselves in
     // an infinite loop within a single bar.
+    this.applyFunding(bar);
+
     const snapshot = this.orders.filter((o) => o.status === "pending");
     const ticker = this.barAsTicker(bar);
 
@@ -141,7 +221,8 @@ export class BacktestVenueImpl implements ExecutionVenue {
     const openTicker = this.barAsTicker(bar, bar.open);
     for (const o of snapshot) {
       if (o.status !== "pending" || o.type !== "market") continue;
-      const fill = applySlippage(bar.open, o.side, o.qty, openTicker, this.opts.slippageCfg);
+      const fill = this.slipped(bar.open, o.side, o.qty, openTicker, bar);
+      if (this.rejected(o, fill, bar)) continue;
       this.fillOrder(o, fill);
     }
 
@@ -155,9 +236,74 @@ export class BacktestVenueImpl implements ExecutionVenue {
         false;
       if (!hit) continue;
       const fill = o.type === "stop"
-        ? applySlippage(o.price, o.side, o.qty, ticker, this.opts.slippageCfg)
+        ? this.slipped(o.price, o.side, o.qty, ticker, bar)
         : o.price;
+      if (this.rejected(o, fill, bar)) continue;
       this.fillOrder(o, fill);
+    }
+  }
+
+  /** Base slippage, scaled by time-of-day and volatility when configured. */
+  private slipped(ref: number, side: Side, qty: number, ticker: Ticker, bar: Candle): number {
+    const contextCfg = this.opts.slippageContext;
+    if (!contextCfg) {
+      return applySlippage(ref, side, qty, ticker, this.opts.slippageCfg);
+    }
+    return applySlippageWithContext(ref, side, qty, ticker, this.opts.slippageCfg, {
+      barTime: bar.time,
+      bar,
+      contextCfg,
+    });
+  }
+
+  /** Cancels the order and reports true when the rejection model drops it. */
+  private rejected(order: PaperOrder, fillPrice: number, bar: Candle): boolean {
+    const cfg = this.opts.rejection;
+    if (!cfg) return false;
+
+    const ref = order.type === "market" ? bar.open : order.price;
+    const decision = evaluateRejection({
+      symbol: order.symbol,
+      side:   order.side,
+      type:   order.type,
+      qty:    order.qty,
+      price:  fillPrice,
+      barTime: bar.time,
+      expectedSlippageBps: ref > 0 ? (Math.abs(fillPrice - ref) / ref) * 10_000 : 0,
+      barRangePct: bar.close > 0 ? ((bar.high - bar.low) / bar.close) * 100 : 0,
+      crossedBook: this.takesLiquidity.has(order.id),
+    }, cfg);
+
+    if (decision.accepted) return false;
+    order.status = "cancelled";
+    this.rejectedCount += 1;
+    this.takesLiquidity.delete(order.id);
+    return true;
+  }
+
+  /**
+   * Charges funding settlements that fall between the previous bar and this one.
+   * A perpetual held for a day pays three times at the usual 8h interval, so
+   * ignoring this systematically overstates the result of any position that
+   * survives overnight.
+   */
+  private applyFunding(bar: Candle): void {
+    const prev = this.lastBarTime;
+    this.lastBarTime = bar.time;
+    const events = this.opts.funding?.events;
+    if (!events || prev === null || this.positions.length === 0) return;
+
+    for (const ev of events) {
+      const ts = ev.timestamp > 1e11 ? Math.floor(ev.timestamp / 1000) : ev.timestamp;
+      if (ts <= prev || ts > bar.time) continue;
+      for (const p of this.positions) {
+        if (p.symbol !== this.opts.symbol) continue;
+        const price = ev.markPrice ?? bar.close;
+        const dir = p.side === "buy" ? 1 : -1;
+        const amount = -dir * p.qty * price * ev.rate;
+        this.balance += amount;
+        this.fundingTotal += amount;
+      }
     }
   }
 
@@ -165,7 +311,9 @@ export class BacktestVenueImpl implements ExecutionVenue {
     order.status = "filled";
     order.filledPrice = fillPrice;
     order.filledTs = this.nowMs();
-    const fee = order.qty * fillPrice * this.opts.feeRate;
+    const role: FeeRole = this.takesLiquidity.has(order.id) ? "taker" : "maker";
+    this.takesLiquidity.delete(order.id);
+    const fee = computeOrderFee(fillPrice, order.qty, role, this.fees);
 
     const sameSide = this.positions.find((p) => p.symbol === order.symbol && p.side === order.side && p.botId === order.botId);
     const opposite = this.positions.find((p) => p.symbol === order.symbol && p.side !== order.side && p.botId === order.botId);
