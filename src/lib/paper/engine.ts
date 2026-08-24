@@ -167,10 +167,9 @@ class PaperTradingEngine {
       const direction = opposite.side === "buy" ? 1 : -1;
       const pnl = (fillPrice - opposite.entryPrice) * closingQty * direction - fee;
 
-      // Update balance: free margin + pnl
-      st.setPaperBalance(st.paperBalance + closingQty * fillPrice * direction * -1 + closingQty * opposite.entryPrice * direction + pnl);
-      // Simpler model: just add pnl, treat margin as 1:1
-      // (The model above is overly complex for spot — see correction below)
+      // Realised pnl already carries the fee; margin is treated as 1:1, so the
+      // notional legs cancel out and must not be added again.
+      st.setPaperBalance(st.paperBalance + pnl);
 
       // Trade history
       const trade: PaperTrade = {
