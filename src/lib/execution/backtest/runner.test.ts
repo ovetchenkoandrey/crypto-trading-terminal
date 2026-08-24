@@ -37,6 +37,7 @@ describe("runBacktest end-to-end", () => {
     const res = await runBacktest({
       symbol: "BTCUSDT", candles, bot: cfg,
       initialBalance: 100_000, feeRate: 0, slippageCfg: slipNone,
+    costs: {},
     });
     // Some orders should have triggered as price swung through the range.
     const filled = res.orders.filter((o) => o.status === "filled");
@@ -56,6 +57,7 @@ describe("runBacktest end-to-end", () => {
     const res = await runBacktest({
       symbol: "BTCUSDT", candles, bot: cfg,
       initialBalance: 10_000, feeRate: 0, slippageCfg: slipNone,
+    costs: {},
     });
     expect(res.trades.length).toBe(0);
     expect(res.stats.netProfit).toBe(0);
@@ -73,6 +75,7 @@ describe("runBacktest end-to-end", () => {
     const res = await runBacktest({
       symbol: "BTCUSDT", candles, bot: cfg,
       initialBalance: 100_000, feeRate: 0, slippageCfg: slipNone,
+    costs: {},
     }, {
       shouldStop: () => { count++; return count > 5; },
     });

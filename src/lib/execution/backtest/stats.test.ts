@@ -62,3 +62,35 @@ describe("computeStats", () => {
     expect(s.avgLoss).toBeCloseTo(-15);
   });
 });
+
+describe("max drawdown percentage", () => {
+  it("reports the deepest percentage, not the percentage of the deepest amount", () => {
+    // Early: 1000 -> 750 is 250 USDT but 25%.
+    // Later: 2000 -> 1690 is 310 USDT yet only 15.5%.
+    // Tracking one maximum reports 15.5% and lets a 25% drawdown pass the gate.
+    const equity = [
+      { time: 0, equity: 1000 },
+      { time: 1, equity:  750 },
+      { time: 2, equity: 2000 },
+      { time: 3, equity: 1690 },
+    ];
+
+    const stats = computeStats(1000, [], equity);
+
+    expect(stats.maxDrawdown).toBeCloseTo(310, 9);
+    expect(stats.maxDrawdownPct).toBeCloseTo(25, 9);
+  });
+
+  it("keeps both maxima on a single drawdown", () => {
+    const equity = [
+      { time: 0, equity: 1000 },
+      { time: 1, equity:  800 },
+      { time: 2, equity: 1000 },
+    ];
+
+    const stats = computeStats(1000, [], equity);
+
+    expect(stats.maxDrawdown).toBeCloseTo(200, 9);
+    expect(stats.maxDrawdownPct).toBeCloseTo(20, 9);
+  });
+});

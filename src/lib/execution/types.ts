@@ -29,6 +29,13 @@ export interface PlaceOrderRequest {
   qty:    number;
   botId?: string;       // attribution — survives across venues
   clientId?: string;    // optional caller-side id for matching async fills
+  /**
+   * Never opens or flips a position — the fill is capped at what is open and
+   * the order is dropped when nothing is. Required for stop-loss and
+   * take-profit: without it a bar touching both leaves one of them to open a
+   * fresh position in the opposite direction that nobody asked for.
+   */
+  reduceOnly?: boolean;
 }
 
 export interface VenueBalance {

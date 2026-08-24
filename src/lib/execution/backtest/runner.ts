@@ -11,7 +11,27 @@ import { CursorBarHistory } from "../../bots/history";
 import { BacktestVenueImpl } from "./BacktestVenue";
 import { computeStats, type BacktestStats, type EquitySample } from "./stats";
 import type { SlippageSettings } from "../../settings";
+import type { SlippageContextSettings } from "../slippage";
+import type { FeeSettings } from "../fees";
+import type { RejectionSettings } from "../rejection";
+import type { InstrumentRules } from "../instrumentRules";
+import type { FundingRateEvent } from "../funding";
 import type { PaperTrade, PaperPosition, PaperOrder } from "../../store";
+
+/**
+ * Cost models for a run. Required — pass `{}` to state explicitly that a run
+ * carries no cost modelling. Making it optional is how the models silently
+ * stopped reaching real runs once already: the venue supported them, the
+ * runner never passed them, and every backtest quietly used flat spot fees
+ * with no funding and no rejections.
+ */
+export interface BacktestCosts {
+  fees?:            FeeSettings;
+  slippageContext?: SlippageContextSettings;
+  rejection?:       RejectionSettings;
+  rules?:           InstrumentRules;
+  funding?:         { events: FundingRateEvent[] };
+}
 
 export interface BacktestParams {
   symbol:         string;
@@ -20,6 +40,18 @@ export interface BacktestParams {
   initialBalance: number;
   feeRate:        number;
   slippageCfg:    SlippageSettings;
+  costs:          BacktestCosts;
+}
+
+/** Names of the cost models a run actually applied, for the report. */
+export function describeCosts(costs: BacktestCosts): string[] {
+  const on: string[] = [];
+  if (costs.fees)            on.push("maker/taker fees");
+  if (costs.slippageContext) on.push("time-of-day slippage");
+  if (costs.rejection)       on.push("order rejection");
+  if (costs.rules)           on.push("instrument rules");
+  if (costs.funding)         on.push("funding");
+  return on;
 }
 
 export interface BacktestProgress {
@@ -32,6 +64,12 @@ export interface BacktestProgress {
 
 export interface BacktestResult {
   params:  BacktestParams;
+  /** Cost models applied to this run — empty means none were configured. */
+  costsApplied: string[];
+  /** Funding paid (negative) or received over the run. */
+  funding: number;
+  /** Orders dropped before filling: rejection model or instrument rules. */
+  rejected: number;
   stats:   BacktestStats;
   trades:  PaperTrade[];
   positions: PaperPosition[];   // any still open at the end
@@ -62,6 +100,7 @@ export async function runBacktest(
     feeRate:        params.feeRate,
     slippageCfg:    params.slippageCfg,
     clock,
+    ...params.costs,
   });
 
   const equity: EquitySample[] = [];
@@ -123,6 +162,9 @@ export async function runBacktest(
 
   return {
     params,
+    costsApplied: describeCosts(params.costs),
+    funding:      venue.fundingTotal,
+    rejected:     venue.rejectedCount,
     stats,
     trades:    venue.getHistory(),
     positions: venue.getOpenPositions(),

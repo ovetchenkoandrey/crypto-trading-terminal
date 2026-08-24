@@ -64,6 +64,7 @@ function run(candles = bars) {
     initialBalance: 10000,
     feeRate: 0,
     slippageCfg: NO_SLIP,
+    costs: {},
   });
 }
 

@@ -5,6 +5,8 @@ import { useStore } from "../store";
 import type { Interval } from "../types";
 import { ensureRange } from "../history/bybitHistory";
 import { runBacktest } from "../execution/backtest/runner";
+import type { BacktestCosts } from "../execution/backtest/runner";
+import { getInstrumentRules } from "../execution/instrumentRules";
 import { useTesterStore, type TesterFormParams } from "./store";
 import { logInfo, logWarn, logOk } from "../eventBus";
 
@@ -63,6 +65,14 @@ export async function startBacktestFromForm(form: TesterFormParams): Promise<voi
   useTesterStore.getState().beginRun();
   const settings = useStore.getState().settings.paperTrading;
   try {
+    // Cost models are declared per run. Funding stays out until the loader can
+    // supply a real rate history — a made-up schedule would be worse than none.
+    const costs: BacktestCosts = {
+      fees:            settings.fees,
+      rejection:       settings.rejection,
+      slippageContext: settings.slippage?.context,
+      rules:           getInstrumentRules(form.symbol),
+    };
     const result = await runBacktest({
       symbol:        form.symbol,
       candles,
@@ -70,6 +80,7 @@ export async function startBacktestFromForm(form: TesterFormParams): Promise<voi
       initialBalance: form.initialBalance,
       feeRate:       settings.feeRate,
       slippageCfg:   settings.slippage,
+      costs,
     }, {
       onProgress: (p) => useTesterStore.getState().setRunProgress(p),
       shouldStop: () => useTesterStore.getState().cancelRequested,
@@ -79,7 +90,8 @@ export async function startBacktestFromForm(form: TesterFormParams): Promise<voi
     if (useTesterStore.getState().cancelRequested) {
       logWarn("backtest", "прогон отменён");
     } else {
-      logOk("backtest", `завершено: ${result.stats.trades} сделок, P/L ${result.stats.netProfit.toFixed(2)} USDT`);
+      const applied = result.costsApplied.length ? result.costsApplied.join(", ") : "без моделей издержек";
+      logOk("backtest", `завершено: ${result.stats.trades} сделок, P/L ${result.stats.netProfit.toFixed(2)} USDT · издержки: ${applied}`);
     }
     useTesterStore.getState().finish(result);
   } catch (err) {

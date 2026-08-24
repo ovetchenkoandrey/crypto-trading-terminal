@@ -39,17 +39,19 @@ export function computeStats(
   const finalEquity = equity.length ? equity[equity.length - 1].equity : initialBalance;
   const netProfit   = finalEquity - initialBalance;
 
-  // Max drawdown across equity curve.
+  // Max drawdown across the equity curve. The absolute and percentage maxima
+  // are tracked independently: a later, larger drawdown in currency can be a
+  // smaller share of a grown account, and reporting its percentage would hide
+  // a deeper early drawdown from the acceptance gate.
   let peak = initialBalance;
   let maxDd = 0;
   let maxDdPct = 0;
   for (const e of equity) {
     if (e.equity > peak) peak = e.equity;
     const dd = peak - e.equity;
-    if (dd > maxDd) {
-      maxDd = dd;
-      maxDdPct = peak > 0 ? (dd / peak) * 100 : 0;
-    }
+    if (dd > maxDd) maxDd = dd;
+    const ddPct = peak > 0 ? (dd / peak) * 100 : 0;
+    if (ddPct > maxDdPct) maxDdPct = ddPct;
   }
 
   // Average hold time. We have no separate openedTs in PaperTrade, so the

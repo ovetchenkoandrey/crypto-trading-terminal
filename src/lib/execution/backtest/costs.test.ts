@@ -55,7 +55,8 @@ describe("fee role", () => {
   });
 
   it("charges the taker rate on a limit priced through the market", () => {
-    // Price is 100, buy limit at 110 crosses the book on arrival.
+    // Price is 100, buy limit at 110 crosses the book on arrival — it takes
+    // liquidity, and it fills at the market, not at its own generous limit.
     const bars = flatBars(3, 100);
     const { clock, venue } = makeVenue(bars, { fees: FEES });
 
@@ -64,7 +65,8 @@ describe("fee role", () => {
     clock.step();
 
     expect(venue.getOpenPositions()).toHaveLength(1);
-    expect(venue.balance).toBeCloseTo(10_000 - 110 * 1 * FEES.takerRate, 9);
+    expect(venue.getOpenPositions()[0].entryPrice).toBe(100);
+    expect(venue.balance).toBeCloseTo(10_000 - 100 * 1 * FEES.takerRate, 9);
   });
 
   it("charges the taker rate on a market order", () => {
@@ -274,5 +276,196 @@ describe("rejection", () => {
     });
 
     expect(outcomes[0]).toBe(outcomes[1]);
+  });
+});
+
+describe("reduce-only", () => {
+  // Long entered at 100, then a take-profit at 105 and a stop at 95 both rest.
+  // Bar 3 spans 88..110 and touches both.
+  const bars: Candle[] = [
+    { time: 0,   open: 100, high: 100, low: 100, close: 100, volume: 10 },
+    { time: 60,  open: 100, high: 100, low: 100, close: 100, volume: 10 },
+    { time: 120, open: 100, high: 110, low:  88, close: 100, volume: 10 },
+    { time: 180, open: 100, high: 100, low: 100, close: 100, volume: 10 },
+  ];
+
+  function openLongThenBracket(reduceOnly: boolean) {
+    const { clock, venue } = makeVenue(bars);
+    clock.step();
+    venue.placeOrder({ symbol: "BTCUSDT", side: "buy", type: "market", price: 0, qty: 1 });
+    clock.step();                                     // filled at bar 1 open = 100
+    venue.placeOrder({ symbol: "BTCUSDT", side: "sell", type: "limit", price: 105, qty: 1, reduceOnly });
+    venue.placeOrder({ symbol: "BTCUSDT", side: "sell", type: "stop",  price: 95,  qty: 1, reduceOnly });
+    clock.step();                                     // bar 2 touches both levels
+    return venue;
+  }
+
+  it("does not open a phantom position when a bar hits both stop and target", () => {
+    const venue = openLongThenBracket(true);
+
+    expect(venue.getOpenPositions()).toHaveLength(0);
+    expect(venue.getHistory()).toHaveLength(1);
+  });
+
+  it("leaves the phantom position without reduce-only, which is why it exists", () => {
+    const venue = openLongThenBracket(false);
+
+    // Documents the hazard: the second leg has nothing to close and opens a
+    // short nobody asked for.
+    expect(venue.getOpenPositions()).toHaveLength(1);
+    expect(venue.getOpenPositions()[0].side).toBe("sell");
+  });
+
+  it("caps the fill at the open size instead of flipping", () => {
+    const { clock, venue } = makeVenue(bars);
+    clock.step();
+    venue.placeOrder({ symbol: "BTCUSDT", side: "buy", type: "market", price: 0, qty: 1 });
+    clock.step();
+    venue.placeOrder({ symbol: "BTCUSDT", side: "sell", type: "market", price: 0, qty: 5, reduceOnly: true });
+    clock.step();
+
+    expect(venue.getOpenPositions()).toHaveLength(0);
+    expect(venue.getHistory()[0].qty).toBe(1);
+  });
+
+  it("drops a reduce-only order when nothing is open", () => {
+    const { clock, venue } = makeVenue(bars);
+    clock.step();
+    const order = venue.placeOrder({ symbol: "BTCUSDT", side: "sell", type: "market", price: 0, qty: 1, reduceOnly: true });
+    clock.step();
+
+    expect(order.status).toBe("cancelled");
+    expect(venue.getOpenPositions()).toHaveLength(0);
+  });
+});
+
+describe("fills on a gapping bar", () => {
+  it("executes a stop at the open when the bar gaps through it", () => {
+    // Long at 100 with a stop at 95; next bar opens at 92, far below the stop.
+    const bars: Candle[] = [
+      { time: 0,   open: 100, high: 100, low: 100, close: 100, volume: 10 },
+      { time: 60,  open: 100, high: 100, low: 100, close: 100, volume: 10 },
+      { time: 120, open:  92, high:  93, low:  88, close:  90, volume: 10 },
+    ];
+    const { clock, venue } = makeVenue(bars);
+
+    clock.step();
+    venue.placeOrder({ symbol: "BTCUSDT", side: "buy", type: "market", price: 0, qty: 1 });
+    clock.step();
+    venue.placeOrder({ symbol: "BTCUSDT", side: "sell", type: "stop", price: 95, qty: 1, reduceOnly: true });
+    clock.step();
+
+    // Filling at 95 would pretend the gap could be traded through.
+    expect(venue.getHistory()[0].exitPrice).toBe(92);
+  });
+
+  it("still uses the stop price when the bar opens above it", () => {
+    const bars: Candle[] = [
+      { time: 0,   open: 100, high: 100, low: 100, close: 100, volume: 10 },
+      { time: 60,  open: 100, high: 100, low: 100, close: 100, volume: 10 },
+      { time: 120, open:  99, high: 100, low:  90, close:  95, volume: 10 },
+    ];
+    const { clock, venue } = makeVenue(bars);
+
+    clock.step();
+    venue.placeOrder({ symbol: "BTCUSDT", side: "buy", type: "market", price: 0, qty: 1 });
+    clock.step();
+    venue.placeOrder({ symbol: "BTCUSDT", side: "sell", type: "stop", price: 95, qty: 1, reduceOnly: true });
+    clock.step();
+
+    expect(venue.getHistory()[0].exitPrice).toBe(95);
+  });
+
+  it("fills a resting limit at its own price", () => {
+    const bars: Candle[] = [
+      { time: 0,   open: 100, high: 100, low: 100, close: 100, volume: 10 },
+      { time: 60,  open: 100, high: 100, low:  85, close: 100, volume: 10 },
+    ];
+    const { clock, venue } = makeVenue(bars);
+
+    clock.step();
+    venue.placeOrder({ symbol: "BTCUSDT", side: "buy", type: "limit", price: 90, qty: 1 });
+    clock.step();
+
+    expect(venue.getOpenPositions()[0].entryPrice).toBe(90);
+  });
+});
+
+describe("fee attribution", () => {
+  it("counts both entry and exit fees in the trade pnl", () => {
+    const bars = flatBars(4, 100);
+    const { clock, venue } = makeVenue(bars, { fees: FEES });
+
+    clock.step();
+    venue.placeOrder({ symbol: "BTCUSDT", side: "buy", type: "market", price: 0, qty: 1 });
+    clock.step();
+    venue.placeOrder({ symbol: "BTCUSDT", side: "sell", type: "market", price: 0, qty: 1 });
+    clock.step();
+
+    // Flat price: the whole loss is the two taker fees, not just the exit one.
+    const expected = -2 * 100 * FEES.takerRate;
+    expect(venue.getHistory()[0].pnl).toBeCloseTo(expected, 9);
+  });
+
+  it("keeps summed trade pnl equal to the balance change", () => {
+    const bars = flatBars(6, 100);
+    const { clock, venue } = makeVenue(bars, { fees: FEES });
+
+    clock.step();
+    venue.placeOrder({ symbol: "BTCUSDT", side: "buy", type: "market", price: 0, qty: 2 });
+    clock.step();
+    venue.placeOrder({ symbol: "BTCUSDT", side: "sell", type: "market", price: 0, qty: 2 });
+    clock.step();
+
+    const summed = venue.getHistory().reduce((s, t) => s + t.pnl, 0);
+    expect(summed).toBeCloseTo(venue.balance - 10_000, 9);
+  });
+
+  it("charges a flip only for the part that closes", () => {
+    const bars = flatBars(6, 100);
+    const { clock, venue } = makeVenue(bars, { fees: FEES });
+
+    clock.step();
+    venue.placeOrder({ symbol: "BTCUSDT", side: "buy", type: "market", price: 0, qty: 1 });
+    clock.step();
+    venue.placeOrder({ symbol: "BTCUSDT", side: "sell", type: "market", price: 0, qty: 3 });
+    clock.step();
+
+    // Closing leg is 1 of the 3 sold: entry fee on 1 plus exit fee on 1.
+    expect(venue.getHistory()[0].qty).toBe(1);
+    expect(venue.getHistory()[0].pnl).toBeCloseTo(-2 * 100 * FEES.takerRate, 9);
+    expect(venue.getOpenPositions()[0].qty).toBe(2);
+  });
+});
+
+describe("rejected limits stay in the book", () => {
+  const NEVER_FILLS = {
+    enabled: true,
+    slippageToleranceBps: 10_000,
+    baseRejectProb: 0,
+    maxRejectProb: 0,
+    volatilityRefPct: 0.2,
+    volatilityMaxFactor: 1,
+    limitFillProbability: 0,        // queue never reaches the order
+    limitFullFillPenetrationBps: 5,
+    stressWindows: [],
+  };
+
+  it("keeps an unfilled limit pending instead of cancelling it", () => {
+    // Bars touch the limit exactly: no penetration, so the queue decides.
+    const bars: Candle[] = [
+      { time: 0,   open: 100, high: 100, low: 100, close: 100, volume: 10 },
+      { time: 60,  open: 100, high: 100, low:  90, close: 100, volume: 10 },
+      { time: 120, open: 100, high: 100, low:  90, close: 100, volume: 10 },
+    ];
+    const { clock, venue } = makeVenue(bars, { rejection: NEVER_FILLS });
+
+    clock.step();
+    const order = venue.placeOrder({ symbol: "BTCUSDT", side: "buy", type: "limit", price: 90, qty: 1 });
+    clock.step();
+    clock.step();
+
+    expect(order.status).toBe("pending");
+    expect(venue.rejectedCount).toBe(0);   // not a rejection, just no fill yet
   });
 });

@@ -12,6 +12,8 @@ export interface BotContext {
     type: OrderType;
     price: number;
     qty: number;
+    /** Caps the fill at the open position and never flips — for stops and targets. */
+    reduceOnly?: boolean;
   }) => VenueOrder;
   cancelOrder: (id: string, reason?: string) => void;
   cancelAllOrders: () => number;     // returns count cancelled

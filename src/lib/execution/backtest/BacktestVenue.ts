@@ -73,6 +73,9 @@ export class BacktestVenueImpl implements ExecutionVenue {
   private readonly fees: FeeSettings;
   /** Orders that take liquidity — market, stop, and marketable limits. */
   private takesLiquidity = new Set<string>();
+  private reduceOnly = new Set<string>();
+  /** Entry fee still attributable to each open position, by position id. */
+  private entryFees = new Map<string, number>();
   private lastBarTime: number | null = null;
 
   constructor(private opts: BacktestVenueOptions) {
@@ -140,6 +143,8 @@ export class BacktestVenueImpl implements ExecutionVenue {
       return order;
     }
 
+    if (req.reduceOnly) this.reduceOnly.add(order.id);
+
     // Fee role is fixed at placement. A limit priced through the current market
     // crosses the book immediately and pays the taker rate; assuming every
     // limit is a maker is the optimistic mistake that flatters grid strategies.
@@ -166,13 +171,14 @@ export class BacktestVenueImpl implements ExecutionVenue {
     const o = this.orders.find((x) => x.id === id);
     if (o && o.status === "pending") {
       o.status = "cancelled";
+      this.forget(o.id);
     }
   }
 
   cancelOrdersByBot(botId: string): number {
     let n = 0;
     for (const o of this.orders) {
-      if (o.status === "pending" && o.botId === botId) { o.status = "cancelled"; n++; }
+      if (o.status === "pending" && o.botId === botId) { o.status = "cancelled"; this.forget(o.id); n++; }
     }
     return n;
   }
@@ -189,6 +195,7 @@ export class BacktestVenueImpl implements ExecutionVenue {
       price,
       qty:    pos.qty,
       botId:  pos.botId,
+      reduceOnly: true,   // closing must never flip into a new position
     });
   }
 
@@ -226,8 +233,15 @@ export class BacktestVenueImpl implements ExecutionVenue {
       this.fillOrder(o, fill);
     }
 
-    for (const o of snapshot) {
-      if (o.status !== "pending" || o.type === "market") continue;   // could be closed by a paired fill
+    // Stops are matched before limits. When one bar covers both a stop-loss and
+    // a take-profit, OHLC cannot say which happened first, so we take the worse
+    // outcome for the strategy rather than let array order decide it.
+    const resting = snapshot
+      .filter((o) => o.type !== "market")
+      .sort((a, b) => Number(b.type === "stop") - Number(a.type === "stop"));
+
+    for (const o of resting) {
+      if (o.status !== "pending") continue;   // could be closed by a paired fill
       const hit =
         o.type === "limit" && o.side === "buy"  && bar.low  <= o.price ? true :
         o.type === "limit" && o.side === "sell" && bar.high >= o.price ? true :
@@ -235,9 +249,17 @@ export class BacktestVenueImpl implements ExecutionVenue {
         o.type === "stop"  && o.side === "sell" && bar.low  <= o.price ? true :
         false;
       if (!hit) continue;
+
+      // A bar that opens beyond the level fills there, not at the level: a stop
+      // at 95 on a bar opening at 92 is a 92 fill, and a buy limit at 110 on a
+      // bar opening at 100 is a 100 fill. Using the order price either way
+      // understates stop losses and overstates marketable limits.
+      const base = o.side === "buy"
+        ? (o.type === "stop" ? Math.max(bar.open, o.price) : Math.min(bar.open, o.price))
+        : (o.type === "stop" ? Math.min(bar.open, o.price) : Math.max(bar.open, o.price));
       const fill = o.type === "stop"
-        ? this.slipped(o.price, o.side, o.qty, ticker, bar)
-        : o.price;
+        ? this.slipped(base, o.side, o.qty, ticker, bar)
+        : base;
       if (this.rejected(o, fill, bar)) continue;
       this.fillOrder(o, fill);
     }
@@ -256,7 +278,7 @@ export class BacktestVenueImpl implements ExecutionVenue {
     });
   }
 
-  /** Cancels the order and reports true when the rejection model drops it. */
+  /** True when the rejection model refuses this fill on this bar. */
   private rejected(order: PaperOrder, fillPrice: number, bar: Candle): boolean {
     const cfg = this.opts.rejection;
     if (!cfg) return false;
@@ -272,12 +294,26 @@ export class BacktestVenueImpl implements ExecutionVenue {
       expectedSlippageBps: ref > 0 ? (Math.abs(fillPrice - ref) / ref) * 10_000 : 0,
       barRangePct: bar.close > 0 ? ((bar.high - bar.low) / bar.close) * 100 : 0,
       crossedBook: this.takesLiquidity.has(order.id),
+      // How far the bar traded through the limit. Deep penetration means the
+      // queue almost certainly cleared, so the model can stop treating the fill
+      // as a coin flip.
+      penetrationBps: order.type === "limit" && order.price > 0
+        ? (order.side === "buy"
+            ? Math.max(0, order.price - bar.low) / order.price
+            : Math.max(0, bar.high - order.price) / order.price) * 10_000
+        : undefined,
     }, cfg);
 
     if (decision.accepted) return false;
+
+    // A limit that did not fill stays in the book: the queue simply failed to
+    // reach it on this bar, and it can fill later. Cancelling it would delete
+    // the order for a timing artefact. Liquidity-taking orders really are gone.
+    if (order.type === "limit") return true;
+
     order.status = "cancelled";
     this.rejectedCount += 1;
-    this.takesLiquidity.delete(order.id);
+    this.forget(order.id);
     return true;
   }
 
@@ -308,21 +344,42 @@ export class BacktestVenueImpl implements ExecutionVenue {
   }
 
   private fillOrder(order: PaperOrder, fillPrice: number): void {
+    const sameSide = this.positions.find((p) => p.symbol === order.symbol && p.side === order.side && p.botId === order.botId);
+    const opposite = this.positions.find((p) => p.symbol === order.symbol && p.side !== order.side && p.botId === order.botId);
+
+    // Reduce-only never opens or flips: with nothing to close it simply dies.
+    let qty = order.qty;
+    if (this.reduceOnly.has(order.id)) {
+      if (!opposite) {
+        order.status = "cancelled";
+        this.forget(order.id);
+        return;
+      }
+      qty = Math.min(qty, opposite.qty);
+      order.qty = qty;
+    }
+
     order.status = "filled";
     order.filledPrice = fillPrice;
     order.filledTs = this.nowMs();
     const role: FeeRole = this.takesLiquidity.has(order.id) ? "taker" : "maker";
-    this.takesLiquidity.delete(order.id);
-    const fee = computeOrderFee(fillPrice, order.qty, role, this.fees);
-
-    const sameSide = this.positions.find((p) => p.symbol === order.symbol && p.side === order.side && p.botId === order.botId);
-    const opposite = this.positions.find((p) => p.symbol === order.symbol && p.side !== order.side && p.botId === order.botId);
+    this.forget(order.id);
+    const fee = computeOrderFee(fillPrice, qty, role, this.fees);
 
     if (opposite) {
-      const closingQty = Math.min(opposite.qty, order.qty);
+      const closingQty = Math.min(opposite.qty, qty);
       const direction  = opposite.side === "buy" ? 1 : -1;
-      const pnl = (fillPrice - opposite.entryPrice) * closingQty * direction - fee;
-      this.balance += pnl;
+      // Split the fee between the part that closes and the part that opens, so
+      // a flip does not charge the closing trade for the whole order.
+      const closingFee = qty > 0 ? fee * (closingQty / qty) : 0;
+      const openingFee = fee - closingFee;
+      const gross = (fillPrice - opposite.entryPrice) * closingQty * direction;
+
+      // Entry fee was already taken from the balance when the position opened;
+      // it belongs in the trade's pnl but must not be deducted twice.
+      const entryFeeTotal = this.entryFees.get(opposite.id) ?? 0;
+      const entryFeeShare = opposite.qty > 0 ? entryFeeTotal * (closingQty / opposite.qty) : 0;
+      this.balance += gross - closingFee;
 
       this.history.push({
         id: uid("trd"),
@@ -332,18 +389,24 @@ export class BacktestVenueImpl implements ExecutionVenue {
         entryPrice: opposite.entryPrice,
         exitPrice:  fillPrice,
         qty:        closingQty,
-        pnl,
+        pnl:        gross - closingFee - entryFeeShare,
         botId:      order.botId,
       });
 
       const remaining = opposite.qty - closingQty;
-      if (remaining > 0) opposite.qty = remaining;
-      else this.positions = this.positions.filter((p) => p.id !== opposite.id);
+      if (remaining > 0) {
+        opposite.qty = remaining;
+        this.entryFees.set(opposite.id, entryFeeTotal - entryFeeShare);
+      } else {
+        this.positions = this.positions.filter((p) => p.id !== opposite.id);
+        this.entryFees.delete(opposite.id);
+      }
 
-      const extra = order.qty - closingQty;
+      const extra = qty - closingQty;
       if (extra > 0) {
+        const id = uid("pos");
         this.positions.push({
-          id: uid("pos"),
+          id,
           symbol: order.symbol,
           side:   order.side,
           entryPrice: fillPrice,
@@ -351,26 +414,37 @@ export class BacktestVenueImpl implements ExecutionVenue {
           openedTs: this.nowMs(),
           botId: order.botId,
         });
+        this.entryFees.set(id, openingFee);
+        this.balance -= openingFee;
       }
     } else if (sameSide) {
-      const total = sameSide.qty + order.qty;
-      sameSide.entryPrice = (sameSide.entryPrice * sameSide.qty + fillPrice * order.qty) / total;
+      const total = sameSide.qty + qty;
+      sameSide.entryPrice = (sameSide.entryPrice * sameSide.qty + fillPrice * qty) / total;
       sameSide.qty = total;
       this.balance -= fee;
+      this.entryFees.set(sameSide.id, (this.entryFees.get(sameSide.id) ?? 0) + fee);
     } else {
+      const id = uid("pos");
       this.positions.push({
-        id: uid("pos"),
+        id,
         symbol: order.symbol,
         side:   order.side,
         entryPrice: fillPrice,
-        qty: order.qty,
+        qty,
         openedTs: this.nowMs(),
         botId: order.botId,
       });
+      this.entryFees.set(id, fee);
       this.balance -= fee;
     }
 
     this.listeners.onOrderFilled?.(order, fillPrice);
+  }
+
+  /** Drops per-order bookkeeping once an order can no longer fill. */
+  private forget(orderId: string): void {
+    this.takesLiquidity.delete(orderId);
+    this.reduceOnly.delete(orderId);
   }
 
   private unrealisedPnl(): number {
