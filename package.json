@@ -17,7 +17,8 @@
     "test:watch": "vitest",
     "data:fetch": "node scripts/fetchData.ts",
     "data:validate": "node scripts/fetchData.ts --validate-only",
-    "backtest": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/tsLoader.mjs scripts/backtest.ts"
+    "backtest": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/tsLoader.mjs scripts/backtest.ts",
+    "optimize": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/tsLoader.mjs scripts/optimize.ts"
   },
   "dependencies": {
     "bybit-api": "^4.6.2",

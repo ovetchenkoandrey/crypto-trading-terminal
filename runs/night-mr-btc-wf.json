@@ -1,0 +1,70 @@
+{
+  "name": "night-mr-btc-wf",
+  "_comment": [
+    "Walk-forward sweep of the night mean-reversion bot. Pipeline demo, not a strategy proposal.",
+    "",
+    "The range stops at 2026-02 on purpose: docs/strategy-ideas.md reserves March-August 2026 as",
+    "out-of-sample and it must not be touched until a candidate has already survived everything here.",
+    "",
+    "base    - a normal run declaration, exactly as npm run backtest takes it. costs are mandatory.",
+    "grid    - what to vary. A list of values, or {from,to,step}, or {from,to,count}.",
+    "          Every key is checked against the bot's parameters, so a typo fails instead of",
+    "          silently sweeping nothing.",
+    "walkForward - trainDays fits, testDays judges, stepDays moves the window. mode rolling keeps",
+    "          the training window a fixed length; anchored grows it from the start of the range.",
+    "objective - what a fold's winner maximises: sharpe | profitFactor | netProfit | netProfitPct |",
+    "          calmar | expectancy.",
+    "minTrainTrades - a combination with fewer trades in a training window cannot be selected.",
+    "          This is the main defence against a fold being won by four lucky trades."
+  ],
+
+  "base": {
+    "market": "linear",
+    "symbol": "BTCUSDT",
+    "interval": "1m",
+    "signalInterval": "15m",
+    "from": "2024-09",
+    "to": "2026-02",
+    "initialBalance": 1000,
+    "stressSlippage": 2,
+    "window": { "days": 30, "stepDays": 7 },
+    "bot": {
+      "kind": "night-mr",
+      "params": { "sessionEndHour": 6, "riskPct": 0.5, "maxLeverage": 5 }
+    },
+    "costs": {
+      "fees": "bybit-linear",
+      "slippage": { "kind": "fixed_bps", "bps": 5 },
+      "slippageContext": true,
+      "rejection": true,
+      "rules": true,
+      "funding": true,
+      "margin": true
+    }
+  },
+
+  "grid": {
+    "bbPeriod": [10, 20, 30, 40],
+    "bbMult": { "from": 2, "to": 3, "step": 0.5 },
+    "sessionStartHour": [0, 2, 3, 4],
+    "exitMode": ["market", "limit"]
+  },
+
+  "walkForward": {
+    "trainDays": 90,
+    "testDays": 30,
+    "mode": "rolling",
+    "warmupBars": 0,
+    "minFolds": 3
+  },
+
+  "objective": "sharpe",
+  "minTrainTrades": 20,
+  "topN": 10,
+  "workers": "auto",
+  "seed": 20260826,
+  "bootstrapSamples": 2000,
+  "evaluateAllOnTest": true,
+  "compareNaive": true,
+  "plateauAxes": ["bbPeriod", "bbMult"]
+}
