@@ -88,6 +88,13 @@ export class BacktestVenueImpl implements ExecutionVenue {
   /** Orders that take liquidity — market, stop, and marketable limits. */
   private takesLiquidity = new Set<string>();
   private reduceOnly = new Set<string>();
+  /**
+   * Orders still eligible to fill, by id. `orders` keeps every order the run
+   * ever saw, so scanning it each bar costs O(orders) per bar and turns a
+   * minute-level run quadratic — at 43k bars and thousands of orders that is
+   * hundreds of millions of comparisons.
+   */
+  private live = new Map<string, PaperOrder>();
   /** Entry fee still attributable to each open position, by position id. */
   private entryFees = new Map<string, number>();
   private lastBarTime: number | null = null;
@@ -167,6 +174,7 @@ export class BacktestVenueImpl implements ExecutionVenue {
       return order;
     }
 
+    this.live.set(order.id, order);
     if (req.reduceOnly) this.reduceOnly.add(order.id);
 
     // Fee role is fixed at placement. A limit priced through the current market
@@ -192,7 +200,7 @@ export class BacktestVenueImpl implements ExecutionVenue {
 
   cancelOrder(id: string, _reason?: string): void {
     void _reason;
-    const o = this.orders.find((x) => x.id === id);
+    const o = this.live.get(id);
     if (o && o.status === "pending") {
       o.status = "cancelled";
       this.forget(o.id);
@@ -201,8 +209,8 @@ export class BacktestVenueImpl implements ExecutionVenue {
 
   cancelOrdersByBot(botId: string): number {
     let n = 0;
-    for (const o of this.orders) {
-      if (o.status === "pending" && o.botId === botId) { o.status = "cancelled"; this.forget(o.id); n++; }
+    for (const o of [...this.live.values()]) {
+      if (o.botId === botId) { o.status = "cancelled"; this.forget(o.id); n++; }
     }
     return n;
   }
@@ -223,7 +231,7 @@ export class BacktestVenueImpl implements ExecutionVenue {
     });
   }
 
-  getOpenOrders():    VenueOrder[]    { return this.orders.filter((o) => o.status === "pending"); }
+  getOpenOrders():    VenueOrder[]    { return [...this.live.values()]; }
   getOpenPositions(): VenuePosition[] { return this.positions.slice(); }
   getHistory():       VenueTrade[]    { return this.history.slice(); }
   getBalance(): VenueBalance {
@@ -243,7 +251,7 @@ export class BacktestVenueImpl implements ExecutionVenue {
     // an infinite loop within a single bar.
     this.applyFunding(bar);
 
-    const snapshot = this.orders.filter((o) => o.status === "pending");
+    const snapshot = [...this.live.values()];
     const ticker = this.barAsTicker(bar);
 
     // Market orders queued on an earlier bar fill at this bar's open, before any
@@ -349,8 +357,9 @@ export class BacktestVenueImpl implements ExecutionVenue {
     this.positions = [];
 
     // The exchange pulls resting orders along with the position.
-    for (const o of this.orders) {
-      if (o.status === "pending") { o.status = "cancelled"; this.forget(o.id); }
+    for (const o of [...this.live.values()]) {
+      o.status = "cancelled";
+      this.forget(o.id);
     }
     this.liquidations += 1;
   }
@@ -534,6 +543,7 @@ export class BacktestVenueImpl implements ExecutionVenue {
 
   /** Drops per-order bookkeeping once an order can no longer fill. */
   private forget(orderId: string): void {
+    this.live.delete(orderId);
     this.takesLiquidity.delete(orderId);
     this.reduceOnly.delete(orderId);
   }
