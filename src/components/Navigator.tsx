@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useStore } from "../lib/store";
 import type { BotConfig } from "../lib/store";
 import { BotConfigDialog } from "./bots/BotConfigDialog";
-import { getBotFactory } from "../lib/bots/registry";
+import { getBotFactory, BOT_FACTORIES } from "../lib/bots/registry";
 import { closeAllPositions, exportHistoryCsv } from "../lib/scripts";
 
 function dragStart(e: React.DragEvent, kind: string) {
@@ -21,13 +21,12 @@ const DRAGGABLE_INDICATORS: { label: string; kind: string }[] = [
   { label: "Fractals", kind: "fractals" },
 ];
 
-const BOT_TEMPLATES: { label: string; kind: string; available: boolean }[] = [
-  { label: "Grid Bot",        kind: "grid", available: true  },
-  { label: "DCA Strategy",    kind: "dca",  available: true  },
-  { label: "Ночной mean reversion", kind: "night-mr", available: true },
-  { label: "MA Crossover EA", kind: "mac",  available: false },
-  { label: "Mean Reversion",  kind: "mr",   available: false },
-];
+// Built from the registry so a newly written bot shows up without touching the
+// UI. A hardcoded list silently hid seven working strategies once already.
+const BOT_TEMPLATES: { label: string; kind: string; available: boolean }[] =
+  Object.values(BOT_FACTORIES)
+    .map((f) => ({ label: f.name, kind: f.kind, available: true }))
+    .sort((a, b) => a.label.localeCompare(b.label, "ru"));
 
 function newBotFromTemplate(kind: string, activeSymbol: string): BotConfig | null {
   const factory = getBotFactory(kind);
