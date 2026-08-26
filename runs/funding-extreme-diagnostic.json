@@ -1,0 +1,71 @@
+{
+  "name": "funding-extreme-diagnostic",
+  "defaults": {
+    "market": "linear",
+    "interval": "1m",
+    "from": "2020-03-01",
+    "to": "2024-12-31",
+    "initialBalance": 1000,
+    "bot": {
+      "kind": "funding-extreme",
+      "params": {
+        "thresholdBps": 20,
+        "direction": "contrarian",
+        "requireStreak": 1,
+        "holdSettlements": 3,
+        "sizeMode": "notional",
+        "notionalPct": 50,
+        "maxLeverage": 3,
+        "minQty": 0.001,
+        "qtyStep": 0.001
+      }
+    },
+    "costs": { "fees": false, "slippage": false },
+    "window": { "days": 30, "stepDays": 7 }
+  },
+  "runs": [
+    { "name": "btc-20bps-zero", "symbol": "BTCUSDT" },
+    { "name": "eth-20bps-zero", "symbol": "ETHUSDT" },
+    { "name": "xrp-20bps-zero", "symbol": "XRPUSDT", "bot": { "params": { "minQty": 1, "qtyStep": 1 } } },
+    { "name": "sol-20bps-zero", "symbol": "SOLUSDT", "bot": { "params": { "minQty": 0.1, "qtyStep": 0.1 } } },
+
+    {
+      "name": "btc-20bps-full", "symbol": "BTCUSDT", "stressSlippage": 5,
+      "costs": { "fees": "bybit-linear", "slippage": { "kind": "fixed_bps", "bps": 5 }, "slippageContext": true, "rejection": true, "rules": true, "funding": true, "margin": true }
+    },
+    {
+      "name": "eth-20bps-full", "symbol": "ETHUSDT", "stressSlippage": 5,
+      "costs": { "fees": "bybit-linear", "slippage": { "kind": "fixed_bps", "bps": 5 }, "slippageContext": true, "rejection": true, "rules": true, "funding": true, "margin": true }
+    },
+    {
+      "name": "xrp-20bps-full", "symbol": "XRPUSDT", "stressSlippage": 5,
+      "bot": { "params": { "minQty": 1, "qtyStep": 1 } },
+      "costs": { "fees": "bybit-linear", "slippage": { "kind": "fixed_bps", "bps": 5 }, "slippageContext": true, "rejection": true, "rules": true, "funding": true, "margin": true }
+    },
+    {
+      "name": "sol-20bps-full", "symbol": "SOLUSDT", "stressSlippage": 5,
+      "bot": { "params": { "minQty": 0.1, "qtyStep": 0.1 } },
+      "costs": { "fees": "bybit-linear", "slippage": { "kind": "fixed_bps", "bps": 5 }, "slippageContext": true, "rejection": true, "rules": true, "funding": true, "margin": true }
+    },
+
+    { "name": "btc-20bps-momentum-zero", "symbol": "BTCUSDT", "bot": { "params": { "direction": "momentum" } } },
+    { "name": "eth-20bps-momentum-zero", "symbol": "ETHUSDT", "bot": { "params": { "direction": "momentum" } } },
+    { "name": "sol-20bps-momentum-zero", "symbol": "SOLUSDT", "bot": { "params": { "direction": "momentum", "minQty": 0.1, "qtyStep": 0.1 } } },
+
+    { "name": "btc-8bps-zero", "symbol": "BTCUSDT", "bot": { "params": { "thresholdBps": 8 } } },
+    { "name": "eth-8bps-zero", "symbol": "ETHUSDT", "bot": { "params": { "thresholdBps": 8 } } },
+    { "name": "xrp-8bps-zero", "symbol": "XRPUSDT", "bot": { "params": { "thresholdBps": 8, "minQty": 1, "qtyStep": 1 } } },
+    { "name": "sol-8bps-zero", "symbol": "SOLUSDT", "bot": { "params": { "thresholdBps": 8, "minQty": 0.1, "qtyStep": 0.1 } } },
+
+    {
+      "name": "btc-8bps-full", "symbol": "BTCUSDT", "stressSlippage": 5,
+      "bot": { "params": { "thresholdBps": 8 } },
+      "costs": { "fees": "bybit-linear", "slippage": { "kind": "fixed_bps", "bps": 5 }, "slippageContext": true, "rejection": true, "rules": true, "funding": true, "margin": true }
+    },
+    {
+      "name": "eth-8bps-full", "symbol": "ETHUSDT", "stressSlippage": 5,
+      "bot": { "params": { "thresholdBps": 8 } },
+      "costs": { "fees": "bybit-linear", "slippage": { "kind": "fixed_bps", "bps": 5 }, "slippageContext": true, "rejection": true, "rules": true, "funding": true, "margin": true }
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "name": "funding-extreme-wf-btc",
+  "base": {
+    "market": "linear",
+    "symbol": "BTCUSDT",
+    "interval": "1m",
+    "from": "2020-03-01",
+    "to": "2024-12-31",
+    "initialBalance": 1000,
+    "bot": {
+      "kind": "funding-extreme",
+      "params": {
+        "requireStreak": 1,
+        "sizeMode": "notional",
+        "notionalPct": 50,
+        "maxLeverage": 3,
+        "minQty": 0.001,
+        "qtyStep": 0.001
+      }
+    },
+    "costs": { "fees": false, "slippage": false },
+    "stressSlippage": 5,
+    "window": { "days": 30, "stepDays": 7 }
+  },
+  "grid": {
+    "thresholdBps": [5, 8, 12, 20],
+    "holdSettlements": [1, 3, 6, 9],
+    "direction": ["contrarian", "momentum"]
+  },
+  "walkForward": { "trainDays": 365, "testDays": 180, "mode": "rolling" },
+  "objective": "sharpe",
+  "minTrainTrades": 5,
+  "topN": 10,
+  "plateauAxes": ["thresholdBps", "holdSettlements"]
+}
