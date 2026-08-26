@@ -21,6 +21,8 @@
     "backtest": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/tsLoader.mjs scripts/backtest.ts",
     "optimize": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/tsLoader.mjs scripts/optimize.ts",
     "market-stats": "node --max-old-space-size=8192 --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/tsLoader.mjs scripts/marketStats.ts",
+    "streak-study": "node --max-old-space-size=6144 --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/tsLoader.mjs scripts/streakStudy.ts",
+    "screen-features": "node --max-old-space-size=8192 --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/tsLoader.mjs scripts/featureScreening.ts",
     "calibrate:costs": "node --experimental-transform-types --disable-warning=ExperimentalWarning --max-old-space-size=6144 --import ./scripts/tsLoader.mjs scripts/calibrateCosts.ts"
   },
   "dependencies": {
