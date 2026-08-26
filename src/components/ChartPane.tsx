@@ -21,6 +21,8 @@ import type { DrawingTool } from "../lib/drawings/types";
 import { getIndicatorDef } from "../lib/indicators/registry";
 import { IndicatorParamsDialog } from "./IndicatorParamsDialog";
 import { SvgDrawingOverlay } from "./SvgDrawingOverlay";
+import { BacktestTradesOverlay } from "./tester/BacktestTradesOverlay";
+import type { TradeView, UnfilledOrderView } from "./tester/model";
 import { DrawingParamsDialog } from "./DrawingParamsDialog";
 import { useStore } from "../lib/store";
 
@@ -40,6 +42,38 @@ interface ChartPaneProps {
   onRemoveDrawing?: (id: string) => void;
   onUpdateDrawing?: (id: string, partial: Partial<Drawing>) => void;
   onToolDone?: () => void;
+
+  /**
+   * Backtest layer. When present the pane stops mirroring the live paper
+   * account — a replayed run and the live account share a symbol but nothing
+   * else, and drawing both would make every marker ambiguous.
+   */
+  backtest?: BacktestLayer;
+  /** Fires with the chart handles after creation and with null on teardown. */
+  onChartReady?: (api: ChartHandles | null) => void;
+  /**
+   * Fit the whole series on load instead of showing the last 200 bars. A live
+   * chart wants the recent window; a finished backtest wants every trade, and
+   * half of them sit outside a 200-bar tail.
+   */
+  fitOnLoad?: boolean;
+  /** Crosshair time in UTC seconds, or null when the cursor leaves the chart. */
+  onCrosshairTime?: (sec: number | null) => void;
+}
+
+export interface ChartHandles {
+  chart: IChartApi;
+  series: ISeriesApi<"Candlestick" | "Line" | "Area">;
+}
+
+export interface BacktestLayer {
+  trades: readonly TradeView[];
+  unfilled: readonly UnfilledOrderView[];
+  selectedId: string | null;
+  showSegments: boolean;
+  showMarkers: boolean;
+  showRejected: boolean;
+  onSelectTrade: (id: string) => void;
 }
 
 function indicatorLabel(ind: ActiveIndicator): string {
@@ -85,7 +119,13 @@ export function ChartPane({
   data, symbol, timeframe, chartType = "candle",
   indicators = [], onAddIndicator, onRemoveIndicator, onUpdateIndicator,
   drawings = [], activeTool = "cursor", onAddDrawing, onRemoveDrawing, onUpdateDrawing, onToolDone,
+  backtest, onChartReady, onCrosshairTime, fitOnLoad = false,
 }: ChartPaneProps) {
+  // Kept in refs so a caller passing an inline arrow does not tear the chart down.
+  const onChartReadyRef = useRef(onChartReady);
+  onChartReadyRef.current = onChartReady;
+  const onCrosshairTimeRef = useRef(onCrosshairTime);
+  onCrosshairTimeRef.current = onCrosshairTime;
   const containerRef = useRef<HTMLDivElement>(null);
   const paneContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -262,6 +302,7 @@ export function ChartPane({
     candleSeriesRef.current = candleSeries;
     volumeSeriesRef.current = volumeSeries;
     setChartReady((n) => n + 1);   // overlay can mount now that chart+series exist
+    onChartReadyRef.current?.({ chart, series: candleSeries });
 
     // Toolbar's ⏵ button asks every chart to scroll to the latest bar
     const onScrollToRealtime = () => chartRef.current?.timeScale().scrollToRealTime();
@@ -277,6 +318,7 @@ export function ChartPane({
 
     chart.subscribeCrosshairMove((param) => {
       const series = candleSeriesRef.current;
+      onCrosshairTimeRef.current?.(param.time ? Number(param.time) : null);
       if (!param.time || !series) return;
       const bar = param.seriesData?.get(series);
       if (bar && "open" in bar) {
@@ -291,6 +333,7 @@ export function ChartPane({
 
     return () => {
       window.removeEventListener("trading-app:scroll-to-realtime", onScrollToRealtime);
+      onChartReadyRef.current?.(null);
       ro.disconnect();
       // cleanup all indicator series before removing chart
       indSeriesRef.current = [];
@@ -438,7 +481,12 @@ export function ChartPane({
       candleSeries.setData(data.map(toMain) as any);
       volumeSeries.setData(data.map(toVol));
       // Defer one frame so the chart definitely knows its post-layout size.
-      if (isInitial || firstFullLoad) {
+      if (fitOnLoad) {
+        // Once now and once after layout settles. Not rAF: a chart in a
+        // background tab never gets a frame, and the fit would never happen.
+        chart.timeScale().fitContent();
+        setTimeout(() => chartRef.current?.timeScale().fitContent(), 0);
+      } else if (isInitial || firstFullLoad) {
         // Show last 200 bars by default; older history is still in memory and reachable by scrolling left.
         const VISIBLE_BARS = 200;
         const total = data.length;
@@ -462,7 +510,7 @@ export function ChartPane({
     lastLenRef.current = data.length;
     lastTimeRef.current = last.time;
     setOhlc({ open: last.open, high: last.high, low: last.low, close: last.close });
-  }, [data]);
+  }, [data, fitOnLoad]);
 
   // Indicator sync effect
   useEffect(() => {
@@ -599,6 +647,14 @@ export function ChartPane({
     tradingLinesRef.current.forEach((pl) => { try { candle.removePriceLine(pl); } catch { /* gone */ } });
     tradingLinesRef.current = [];
 
+    // In backtest mode the pane belongs to the replayed run, not to the live
+    // paper account. Mixing the two would draw markers from two different
+    // ledgers on one price axis.
+    if (backtest) {
+      fillMarkersRef.current?.setMarkers([]);
+      return;
+    }
+
     // 1. Open positions for THIS symbol
     const positions = allPositions.filter((p) => p.symbol === symbol);
     for (const p of positions) {
@@ -648,7 +704,7 @@ export function ChartPane({
       fillMarkersRef.current = createSeriesMarkers(candle, fills);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartReady, symbol, allPositions, allOrders, allHistory]);
+  }, [chartReady, symbol, allPositions, allOrders, allHistory, backtest]);
 
   const isEmpty = data.length === 0;
 
@@ -697,6 +753,19 @@ export function ChartPane({
             onDelete={(id) => onRemoveDrawing?.(id)}
             onEdit={(id) => setEditingDrawing(id)}
             onToolDone={() => onToolDone?.()}
+          />
+        )}
+        {chartReady > 0 && backtest && chartRef.current && candleSeriesRef.current && (
+          <BacktestTradesOverlay
+            chart={chartRef.current}
+            series={candleSeriesRef.current}
+            trades={backtest.trades}
+            unfilled={backtest.unfilled}
+            selectedId={backtest.selectedId}
+            showSegments={backtest.showSegments}
+            showMarkers={backtest.showMarkers}
+            showRejected={backtest.showRejected}
+            onSelect={backtest.onSelectTrade}
           />
         )}
       </div>

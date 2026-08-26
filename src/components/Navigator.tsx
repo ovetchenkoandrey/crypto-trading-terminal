@@ -24,6 +24,7 @@ const DRAGGABLE_INDICATORS: { label: string; kind: string }[] = [
 const BOT_TEMPLATES: { label: string; kind: string; available: boolean }[] = [
   { label: "Grid Bot",        kind: "grid", available: true  },
   { label: "DCA Strategy",    kind: "dca",  available: true  },
+  { label: "Ночной mean reversion", kind: "night-mr", available: true },
   { label: "MA Crossover EA", kind: "mac",  available: false },
   { label: "Mean Reversion",  kind: "mr",   available: false },
 ];

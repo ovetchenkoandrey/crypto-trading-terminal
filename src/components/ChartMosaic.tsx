@@ -11,6 +11,8 @@ import { logError } from "../lib/eventBus";
 import type { Interval } from "../lib/types";
 import { SymbolPicker } from "./SymbolPicker";
 import { getIndicatorDef } from "../lib/indicators/registry";
+import { useTesterStore } from "../lib/backtest/store";
+import { BacktestChartCell } from "./tester/BacktestChartCell";
 
 export function ChartMosaic() {
   const layout    = useStore((s) => s.layout);
@@ -32,6 +34,12 @@ export function ChartMosaic() {
   const settings           = useStore((s) => s.settings);
 
   const [pickerCell, setPickerCell] = useState<number | null>(null);
+
+  // One cell can be handed over to a finished backtest — the MT4-classic layout.
+  // Everything else in the window stays live.
+  const testerOnChart = useTesterStore((s) => s.view.onChart);
+  const testerCell    = useTesterStore((s) => s.view.chartCell);
+  const testerResult  = useTesterStore((s) => s.run.result);
 
   const count   = layout === "1" ? 1 : layout === "2" ? 2 : 4;
   const visible = cells.slice(0, count);
@@ -75,6 +83,10 @@ export function ChartMosaic() {
           const dir = ch >= 0 ? "up" : "dn";
           const isActive = i === activeCell;
           const chartType = cell.chartType ?? settings.chart.defaultChartType;
+
+          if (testerOnChart && testerResult && i === testerCell) {
+            return <BacktestChartCell key={`bt-${i}`} />;
+          }
 
           return (
             <div

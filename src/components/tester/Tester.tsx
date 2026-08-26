@@ -5,13 +5,14 @@
 //   running      → progress bar + live stats + cancel button
 //   done         → results (stats + equity + trades table)
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "../../lib/store";
 import { useTesterStore, type TesterFormParams } from "../../lib/backtest/store";
 import { startBacktestFromForm } from "../../lib/backtest/driver";
 import { TIMEFRAMES } from "../../lib/symbols";
-import { fmtUsdt, fmtPrice } from "../../lib/format";
-import { getPricePrecision } from "../../lib/symbols";
+import { fmtUsdt } from "../../lib/format";
+import { TesterReport } from "./TesterReport";
+import { TesterTrades } from "./TesterTrades";
 
 export function Tester() {
   const state = useTesterStore((s) => s.state);
@@ -57,7 +58,10 @@ function TesterForm() {
 
   const start = () => {
     if (!form.botId) return;
-    useTesterStore.getState().setLastParams(form);
+    const ts = useTesterStore.getState();
+    ts.setLastParams(form);
+    // The cell the user is looking at is the cell that plays the run.
+    ts.showOnChart(useStore.getState().activeCellIndex);
     startBacktestFromForm(form);
   };
 
@@ -240,116 +244,52 @@ function Stat({ label, value, mode }: { label: string; value: string; mode?: "po
 // ─── results ──────────────────────────────────────────────────────────────
 
 function TesterResults() {
-  const run    = useTesterStore((s) => s.run);
-  const reset  = useTesterStore((s) => s.reset);
+  const run        = useTesterStore((s) => s.run);
+  const reset      = useTesterStore((s) => s.reset);
+  const lastParams = useTesterStore((s) => s.lastParams);
+  const onChart    = useTesterStore((s) => s.view.onChart);
+  const activeCell = useStore((s) => s.activeCellIndex);
   if (!run.result) return null;
   const r = run.result;
   const s = r.stats;
-  const elapsedSec = run.finishedAt ? Math.floor((run.finishedAt - run.startedAt) / 1000) : 0;
+  const durationMs = run.finishedAt ? run.finishedAt - run.startedAt : 0;
 
   return (
-    <div className="tester-body">
-      <div className="tester-controls" style={{ marginBottom: 12 }}>
-        <button data-testid="tester-run-again" className="pbtn primary" onClick={() => startBacktestFromForm(r.params as never)}>
-          ▶ Run again
+    <div className="tester-body tester-done">
+      <div className="tester-controls tester-done-bar">
+        <button data-testid="tester-run-again" className="pbtn primary"
+                disabled={!lastParams}
+                onClick={() => lastParams && startBacktestFromForm(lastParams)}>
+          ▶ Повторить
         </button>
         <button data-testid="tester-edit" className="pbtn ghost" onClick={reset}>
-          Edit settings
+          Настройки
         </button>
-        <span className="dim">Завершено за {elapsedSec}с · {r.stats.trades} сделок</span>
+        <button data-testid="tester-toggle-chart" className={"pbtn " + (onChart ? "ghost" : "primary")}
+                onClick={() => {
+                  const st = useTesterStore.getState();
+                  if (st.view.onChart) st.hideChart();
+                  else st.showOnChart(activeCell);
+                }}>
+          {onChart ? "Убрать с графика" : "Показать на графике"}
+        </button>
+        <span className={"tester-headline " + (s.netProfit >= 0 ? "pnl-pos" : "pnl-neg")}>
+          {s.netProfit >= 0 ? "+" : "−"}{fmtUsdt(Math.abs(s.netProfit))} USDT
+        </span>
+        <span className="dim">
+          {s.trades} сделок · прогон за {Math.max(1, Math.round(durationMs / 1000))}с
+        </span>
       </div>
 
-      <div className="tester-results">
-        <div className="tester-stats-block">
-          <h3>Сводка</h3>
-          <StatRow k="Net profit" v={`${s.netProfit >= 0 ? "+" : ""}${fmtUsdt(s.netProfit)} (${s.netProfitPct >= 0 ? "+" : ""}${s.netProfitPct.toFixed(2)}%)`} mode={s.netProfit >= 0 ? "pos" : "neg"} />
-          <StatRow k="Сделок" v={`${s.trades} (${s.wins}W / ${s.losses}L)`} />
-          <StatRow k="Win rate" v={`${(s.winRate * 100).toFixed(1)}%`} mode={s.winRate >= 0.5 ? "pos" : "neg"} />
-          <StatRow k="Profit factor" v={Number.isFinite(s.profitFactor) ? s.profitFactor.toFixed(2) : "∞"} />
-          <StatRow k="Max drawdown" v={`-${fmtUsdt(s.maxDrawdown)} (-${s.maxDrawdownPct.toFixed(2)}%)`} mode="neg" />
-          <StatRow k="Avg trade" v={`${s.avgTrade >= 0 ? "+" : ""}${fmtUsdt(s.avgTrade)}`} />
-          <StatRow k="Avg win / loss" v={`${fmtUsdt(s.avgWin)} / ${fmtUsdt(s.avgLoss)}`} />
-          <StatRow k="Sharpe (дневной)" v={s.sharpeDaily.toFixed(2)} />
+      <div className="tester-done-grid">
+        <div className="tdg-left">
+          <TesterReport result={r} durationMs={durationMs} />
         </div>
-        <EquityCurve equity={r.equity} initial={r.params.initialBalance} />
+        <div className="tdg-right">
+          <TesterTrades trades={r.trades} symbol={r.params.symbol} />
+        </div>
       </div>
-
-      <TradesTable trades={r.trades} symbol={r.params.symbol} />
     </div>
-  );
-}
-
-function StatRow({ k, v, mode }: { k: string; v: string; mode?: "pos" | "neg" }) {
-  const cls = mode === "pos" ? "pnl-pos" : mode === "neg" ? "pnl-neg" : "";
-  return (
-    <div className="stat-row"><span className="k">{k}</span><span className={"v " + cls}>{v}</span></div>
-  );
-}
-
-function EquityCurve({ equity, initial }: { equity: { time: number; equity: number }[]; initial: number }) {
-  const points = useMemo(() => {
-    if (equity.length === 0) return "";
-    const min = Math.min(initial, ...equity.map((e) => e.equity));
-    const max = Math.max(initial, ...equity.map((e) => e.equity));
-    const span = Math.max(1, max - min);
-    return equity.map((e, i) => {
-      const x = (i / (equity.length - 1 || 1)) * 400;
-      const y = 180 - ((e.equity - min) / span) * 170;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    }).join(" ");
-  }, [equity, initial]);
-
-  const final = equity.length ? equity[equity.length - 1].equity : initial;
-  const profitable = final >= initial;
-  const color = profitable ? "#3cc85a" : "#dc3c3c";
-
-  return (
-    <div className="tester-equity">
-      <div className="eq-head">
-        <span>Equity curve</span>
-        <span style={{ color }}>{fmtUsdt(final)} USDT</span>
-      </div>
-      {equity.length > 1 ? (
-        <svg viewBox="0 0 400 184" preserveAspectRatio="none">
-          <polyline points={points} stroke={color} strokeWidth="1.5" fill="none" />
-        </svg>
-      ) : (
-        <div className="eq-empty">Нет данных для графика</div>
-      )}
-    </div>
-  );
-}
-
-function TradesTable({ trades, symbol }: { trades: { id: string; ts: number; side: string; entryPrice: number; exitPrice: number; qty: number; pnl: number }[]; symbol: string }) {
-  if (trades.length === 0) {
-    return <div className="tester-empty" style={{ marginTop: 12 }}>Сделок нет</div>;
-  }
-  const precision = getPricePrecision(symbol, trades[0].exitPrice);
-  return (
-    <table className="tester-trades">
-      <thead>
-        <tr>
-          <th>#</th><th>Закрыта</th><th>Сторона</th>
-          <th>Вход</th><th>Выход</th><th>Объём</th><th>P/L</th>
-        </tr>
-      </thead>
-      <tbody>
-        {trades.slice(0, 50).map((t, i) => (
-          <tr key={t.id}>
-            <td>{i + 1}</td>
-            <td>{new Date(t.ts).toISOString().slice(0, 16).replace("T", " ")}</td>
-            <td style={{ color: t.side === "buy" ? "var(--green)" : "var(--red)" }}>{t.side.toUpperCase()}</td>
-            <td>{fmtPrice(t.entryPrice, precision)}</td>
-            <td>{fmtPrice(t.exitPrice, precision)}</td>
-            <td>{t.qty}</td>
-            <td className={t.pnl >= 0 ? "pnl-pos" : "pnl-neg"}>{t.pnl >= 0 ? "+" : ""}{fmtUsdt(t.pnl)}</td>
-          </tr>
-        ))}
-        {trades.length > 50 && (
-          <tr><td colSpan={7} style={{ textAlign: "center", color: "var(--fg-mute)" }}>… и ещё {trades.length - 50}</td></tr>
-        )}
-      </tbody>
-    </table>
   );
 }
 

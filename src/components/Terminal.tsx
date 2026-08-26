@@ -34,7 +34,7 @@ export function Terminal() {
   ];
 
   return (
-    <div className="terminal">
+    <div className={"terminal" + (tab === "tester" ? " tall" : "")}>
       <div className="tabs">
         {TABS.map((t) => (
           <button
