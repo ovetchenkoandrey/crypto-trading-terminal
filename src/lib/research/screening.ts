@@ -62,6 +62,26 @@ export interface ScreenOptions {
   subperiods?: number;
   /** How many features go on to the interaction and pair stages. */
   shortlist?: number;
+  /**
+   * Extra features supplied per symbol, screened alongside the catalogue.
+   *
+   * The catalogue computes from candles alone, which is the right interface for
+   * anything derived from OHLCV and the wrong one for anything that is not: an
+   * external series has to be located by symbol before it can be aligned. The
+   * factory is called once per symbol per stage, and the names it returns must
+   * be the same across symbols or the cells will not pool.
+   */
+  extraFeatures?: (symbol: string) => FeatureSpec[];
+  /** Screen only the extra features, leaving the OHLCV catalogue out. */
+  includeBaseFeatures?: boolean;
+  /**
+   * Features that go into the regime and pair stages whatever their rank.
+   *
+   * Without it a weak family never meets a strong one: the shortlist is taken by
+   * |z|, and the question "does positioning act as a regime filter for what we
+   * already measured" needs both sides present at once.
+   */
+  pinShortlist?: string[];
   /** Round-trip taker cost in basis points, used for the economic comparison. */
   costBps?: number;
   onProgress?: (message: string) => void;
@@ -173,7 +193,7 @@ export interface ScreenResult {
   elapsedMs: number;
 }
 
-interface LoadedFrames {
+export interface LoadedFrames {
   bars: Map<DataInterval, Candle[]>;
 }
 
@@ -184,7 +204,7 @@ interface LoadedFrames {
  * several hundred megabytes per symbol and buys nothing: the aggregators only
  * ever need the current bar.
  */
-function loadFrames(
+export function loadFrames(
   dataRoot: string,
   market: Market,
   symbol: string,
@@ -438,9 +458,11 @@ export function runScreen(opts: ScreenOptions): ScreenResult {
   const costBps = opts.costBps ?? 11;
   const say = opts.onProgress ?? ((): void => {});
 
-  const catalog = featureCatalog();
+  const baseCatalog = opts.includeBaseFeatures === false ? [] : featureCatalog();
+  const catalogFor = (symbol: string): FeatureSpec[] => [...baseCatalog, ...(opts.extraFeatures?.(symbol) ?? [])];
   const regimeSpecs = regimeCatalog();
   const symbols = opts.symbols.map(normalizeSymbol);
+  const featureNames = new Set(catalogFor(symbols[0] ?? "BTCUSDT").map((s) => s.name));
 
   const raw = new Map<string, RawCell>();
   const perSymbolBars: Record<string, Record<string, number>> = {};
@@ -449,6 +471,7 @@ export function runScreen(opts: ScreenOptions): ScreenResult {
 
   for (const symbol of symbols) {
     say(`loading ${symbol}`);
+    const catalog = catalogFor(symbol);
     const frames = loadFrames(opts.dataRoot, opts.market, symbol, opts.fromSec, opts.toSec, timeframes);
     perSymbolBars[symbol] = {};
 
@@ -566,9 +589,12 @@ export function runScreen(opts: ScreenOptions): ScreenResult {
     const prev = bestPerFeature.get(c.feature);
     if (!prev || Math.abs(c.z) > Math.abs(prev.z)) bestPerFeature.set(c.feature, c);
   }
-  const picks = Array.from(bestPerFeature.values())
-    .sort((a, b) => Math.abs(b.z) - Math.abs(a.z))
-    .slice(0, shortlist);
+  const ranked = Array.from(bestPerFeature.values()).sort((a, b) => Math.abs(b.z) - Math.abs(a.z));
+  const pinned = new Set((opts.pinShortlist ?? []).filter((n) => featureNames.has(n)));
+  const picks = [
+    ...ranked.filter((c) => pinned.has(c.feature)),
+    ...ranked.filter((c) => !pinned.has(c.feature)).slice(0, Math.max(0, shortlist - pinned.size)),
+  ];
 
   const regimes: RegimeReport[] = [];
   const pairs: PairReport[] = [];
@@ -581,12 +607,12 @@ export function runScreen(opts: ScreenOptions): ScreenResult {
       byTf.set(p.timeframe, list);
     }
 
-    const specByName = new Map<string, FeatureSpec>(catalog.map((s) => [s.name, s]));
     const regimeAcc = new Map<string, { label: string; ics: number[]; ses: number[] }[]>();
     const pairAcc = new Map<string, { cells: Map<string, { means: number[]; ses: number[] }>; size: number }>();
 
     for (const symbol of symbols) {
       say(`stage two: ${symbol}`);
+      const specByName = new Map<string, FeatureSpec>(catalogFor(symbol).map((s) => [s.name, s]));
       const tfs = Array.from(byTf.keys());
       const frames = loadFrames(opts.dataRoot, opts.market, symbol, opts.fromSec, opts.toSec, tfs);
 
@@ -788,7 +814,7 @@ export function runScreen(opts: ScreenOptions): ScreenResult {
     buckets,
     subperiods,
     costBps,
-    featureCount: catalog.length,
+    featureCount: featureNames.size,
     cells,
     crossCorr,
     icAdjusted,
