@@ -17,6 +17,7 @@
     "test:watch": "vitest",
     "data:fetch": "node scripts/fetchData.ts",
     "data:validate": "node scripts/fetchData.ts --validate-only",
+    "data:survey": "node --max-old-space-size=4096 --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/tsLoader.mjs scripts/datasetSurvey.ts",
     "backtest": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/tsLoader.mjs scripts/backtest.ts",
     "optimize": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/tsLoader.mjs scripts/optimize.ts",
     "market-stats": "node --max-old-space-size=8192 --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/tsLoader.mjs scripts/marketStats.ts",

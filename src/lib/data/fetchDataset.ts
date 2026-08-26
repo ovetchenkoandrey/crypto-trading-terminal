@@ -1,16 +1,19 @@
 import type { Candle } from "../types.ts";
 import { tryDownloadArchive, type ArchiveOptions } from "./binanceArchive.ts";
 import { fetchFundingHistory, fetchFundingIntervalMinutes, fetchKlines, type BybitOptions } from "./bybitRest.ts";
-import { createCandleStore, type CandleSource, type CandleStore } from "./candleStore.ts";
+import { createCandleStore, type CandleSource, type CandleStore, type MonthMeta } from "./candleStore.ts";
 import { createFundingStore, type FundingStore } from "./fundingStore.ts";
 import { intervalSeconds } from "./interval.ts";
 import {
+  dayOf,
   dayStartSec,
   daysOfMonth,
+  expectedBarsInMonth,
   monthEndSec,
   monthRange,
   monthStartSec,
   toISO,
+  type DayKey,
   type MonthKey,
 } from "./months.ts";
 import type { DatasetKey, Market } from "./paths.ts";
@@ -44,7 +47,15 @@ export interface ProgressEvent {
   message: string;
 }
 
-export type MonthAction = "skipped" | "archive" | "daily" | "rest" | "daily+rest" | "unavailable" | "failed";
+export type MonthAction =
+  | "skipped"
+  | "archive"
+  | "archive+daily"
+  | "daily"
+  | "rest"
+  | "daily+rest"
+  | "unavailable"
+  | "failed";
 
 export interface MonthOutcome {
   month: MonthKey;
@@ -53,6 +64,8 @@ export interface MonthOutcome {
   total: number;
   sources: CandleSource[];
   complete: boolean;
+  /** Days the monthly archive had lost and the daily archives gave back. */
+  repairedDays?: DayKey[];
   error?: string;
 }
 
@@ -67,6 +80,13 @@ export interface FetchDatasetOptions {
   tail?: boolean;
   /** Use the daily Binance archives before falling back to REST. */
   daily?: boolean;
+  /**
+   * Re-examine months already marked complete and try to fill whole days the
+   * monthly archive lost. Off by default: it costs a read of every short month
+   * and a request per short day, and for a genuine exchange outage the daily
+   * archive hands back the same hole every time.
+   */
+  repair?: boolean;
   archive?: ArchiveOptions;
   bybit?: BybitOptions;
   store?: CandleStore;
@@ -121,8 +141,34 @@ export async function fetchDataset(opts: FetchDatasetOptions): Promise<FetchData
     const wantsUpgrade = monthEnded && meta !== null && !homogeneous;
 
     if (!opts.force && meta?.complete && !wantsUpgrade) {
-      report({ ...base, phase: "skip", message: `${month}: ${before} bars already complete` });
-      outcomes.push({ month, action: "skipped", added: 0, total: before, sources: meta.sources, complete: true });
+      const shortOfFull = monthEnded && meta.count < expectedBarsInMonth(month, step);
+      if (!(opts.repair && useDaily && shortOfFull)) {
+        report({ ...base, phase: "skip", message: `${month}: ${before} bars already complete` });
+        outcomes.push({ month, action: "skipped", added: 0, total: before, sources: meta.sources, complete: true });
+        continue;
+      }
+
+      const repair = await repairMonthFromDailies({
+        opts,
+        store,
+        month,
+        monthLastBar,
+        step,
+        base,
+        report,
+        onDailyRequest: () => dailyArchives++,
+      });
+      const total = repair.meta?.count ?? before;
+      added += Math.max(0, total - before);
+      outcomes.push({
+        month,
+        action: repair.days.length > 0 ? "archive+daily" : "skipped",
+        added: total - before,
+        total,
+        sources: repair.meta?.sources ?? meta.sources,
+        complete: true,
+        repairedDays: repair.days.length > 0 ? repair.days : undefined,
+      });
       continue;
     }
 
@@ -138,17 +184,11 @@ export async function fetchDataset(opts: FetchDatasetOptions): Promise<FetchData
         );
         if (archive) {
           const candles = clip(archive.candles, monthStart, monthLastBar);
-          const written = store.writeMonth(opts.key, month, candles, {
-            sources: ["binance-archive"],
-            complete: true,
-          });
-          added += Math.max(0, written.count - before);
-          outcomes.push({
-            month,
-            action: "archive",
-            added: written.count - before,
-            total: written.count,
-            sources: written.sources,
+          // `source`, not `sources`: the store derives the provenance span from
+          // it, and a month written without a span disappears from the source
+          // map the quality report prints.
+          let written = store.writeMonth(opts.key, month, candles, {
+            source: "binance-archive",
             complete: true,
           });
           report({
@@ -157,6 +197,33 @@ export async function fetchDataset(opts: FetchDatasetOptions): Promise<FetchData
             candles: written.count,
             bytes: archive.zipBytes,
             message: `${month}: ${written.count} bars from monthly archive (${archive.timeUnit} timestamps, ${(archive.zipBytes / 1048576).toFixed(2)} MB)`,
+          });
+
+          let repairedDays: DayKey[] = [];
+          if (useDaily) {
+            const repair = await repairMonthFromDailies({
+              opts,
+              store,
+              month,
+              monthLastBar,
+              step,
+              base,
+              report,
+              onDailyRequest: () => dailyArchives++,
+            });
+            repairedDays = repair.days;
+            written = repair.meta ?? written;
+          }
+
+          added += Math.max(0, written.count - before);
+          outcomes.push({
+            month,
+            action: repairedDays.length > 0 ? "archive+daily" : "archive",
+            added: written.count - before,
+            total: written.count,
+            sources: written.sources,
+            complete: true,
+            repairedDays: repairedDays.length > 0 ? repairedDays : undefined,
           });
           handled = true;
         }
@@ -199,6 +266,81 @@ export async function fetchDataset(opts: FetchDatasetOptions): Promise<FetchData
     requests: { archives, dailyArchives },
     durationMs: Date.now() - started,
   };
+}
+
+/**
+ * A day is re-fetched from the daily archive when the monthly one gave back less
+ * than this share of it. The failure mode being targeted is a monthly archive
+ * that silently dropped whole days — SOLUSDT futures 2022-02 ships 36000 bars
+ * instead of 40320, and the daily files for 26–28 February have every one of the
+ * missing bars. A genuine exchange outage of an hour or two is left alone, since
+ * the daily archive would only hand back the same hole at the cost of a request.
+ */
+const DAY_REPAIR_THRESHOLD = 0.5;
+
+interface RepairArgs {
+  opts: FetchDatasetOptions;
+  store: CandleStore;
+  month: MonthKey;
+  monthLastBar: number;
+  step: number;
+  base: { month: MonthKey; monthIndex: number; monthTotal: number };
+  report: (e: ProgressEvent) => void;
+  onDailyRequest: () => void;
+}
+
+async function repairMonthFromDailies(args: RepairArgs): Promise<{ meta: MonthMeta | null; days: DayKey[] }> {
+  const { opts, store, month, monthLastBar, step, base, report } = args;
+  const key = opts.key;
+
+  const present = new Map<DayKey, number>();
+  for (const c of store.readMonth(key, month)) {
+    const day = dayOf(c.time);
+    present.set(day, (present.get(day) ?? 0) + 1);
+  }
+
+  const short: { day: DayKey; from: number; to: number; have: number; expected: number }[] = [];
+  for (const day of daysOfMonth(month, monthLastBar)) {
+    const from = dayStartSec(day);
+    const to = Math.min(from + 86400 - step, monthLastBar);
+    if (to < from) continue;
+    const expected = Math.floor((to - from) / step) + 1;
+    const have = present.get(day) ?? 0;
+    if (have < expected * DAY_REPAIR_THRESHOLD) short.push({ day, from, to, have, expected });
+  }
+
+  let meta = store.readMeta(key, month);
+  if (short.length === 0) return { meta, days: [] };
+
+  const repaired: DayKey[] = [];
+  for (const s of short) {
+    report({
+      ...base,
+      phase: "daily",
+      day: s.day,
+      message: `${month}: monthly archive has ${s.have}/${s.expected} bars for ${s.day}, trying the daily archive`,
+    });
+    args.onDailyRequest();
+    const archive = await tryDownloadArchive(
+      { market: key.market, symbol: key.symbol, interval: key.interval, granularity: "daily", period: s.day },
+      opts.archive,
+    );
+    if (!archive) continue;
+
+    const candles = clip(archive.candles, s.from, s.to);
+    if (candles.length <= s.have) continue;
+    meta = store.appendMonth(key, month, candles, { source: "binance-archive", complete: true });
+    repaired.push(s.day);
+    report({
+      ...base,
+      phase: "daily",
+      day: s.day,
+      candles: meta.count,
+      message: `${month}: recovered ${candles.length - s.have} bar(s) for ${s.day} from the daily archive`,
+    });
+  }
+
+  return { meta, days: repaired };
 }
 
 interface FillArgs {

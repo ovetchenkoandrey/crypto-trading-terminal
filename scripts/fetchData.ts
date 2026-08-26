@@ -23,6 +23,8 @@ Usage: npm run data:fetch -- --symbol BTCUSDT --from 2024-09 --to 2026-08 --inte
   --funding-only      skip candles
   --no-tail           archives only, do not follow the tail via Bybit REST
   --no-daily          skip daily archives, use REST for anything not packaged monthly
+  --repair            re-check finished months and refill whole days the monthly
+                      archive lost, without redownloading the monthly file
   --force             refetch months already marked complete
   --validate-only     no network, just re-run the checks over what is on disk
   --allow-invalid     exit 0 even when the quality report fails
@@ -43,6 +45,7 @@ interface Args {
   fundingOnly: boolean;
   tail: boolean;
   daily: boolean;
+  repair: boolean;
   force: boolean;
   validateOnly: boolean;
   allowInvalid: boolean;
@@ -109,6 +112,7 @@ function parseArgs(argv: string[]): Args {
     fundingOnly: bare.has("funding-only"),
     tail: !bare.has("no-tail"),
     daily: !bare.has("no-daily"),
+    repair: bare.has("repair"),
     force: bare.has("force"),
     validateOnly: bare.has("validate-only"),
     allowInvalid: bare.has("allow-invalid"),
@@ -170,6 +174,7 @@ async function main(): Promise<void> {
           force: args.force,
           tail: args.tail,
           daily: args.daily,
+          repair: args.repair,
           store,
           onProgress,
           continueOnError: true,
@@ -178,6 +183,11 @@ async function main(): Promise<void> {
         if (process.stdout.isTTY && !args.quiet) process.stdout.write("\n");
         const failures = result.months.filter((m) => m.action === "failed");
         for (const f of failures) process.stderr.write(`month ${f.month} failed: ${f.error}\n`);
+        for (const m of result.months) {
+          if (m.repairedDays?.length) {
+            process.stdout.write(`month ${m.month}: monthly archive was short, recovered ${m.repairedDays.join(", ")} from daily archives\n`);
+          }
+        }
         process.stdout.write(
           `fetched ${result.added} new bars in ${(result.durationMs / 1000).toFixed(1)}s ` +
             `(${result.requests.archives} monthly, ${result.requests.dailyArchives} daily archive requests)\n`,

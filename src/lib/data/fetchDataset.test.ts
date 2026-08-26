@@ -135,8 +135,71 @@ describe("fetchDataset", () => {
     const meta = store.readMeta(KEY, "2025-03");
     expect(meta?.count).toBe(744);
     expect(meta?.sources).toEqual(["binance-archive"]);
+    expect(meta?.sourceSpans).toEqual([
+      { source: "binance-archive", from: monthStartSec("2025-03"), to: monthStartSec("2025-04") - HOUR },
+    ]);
     expect(meta?.complete).toBe(true);
     expect(fixture.restCalls).toBe(0);
+  });
+
+  it("refills days the monthly archive lost from the daily archives", async () => {
+    const fixture = makeFixture();
+    // Days 1..28 only: the shape of a real short monthly file (SOLUSDT 2022-02).
+    addArchive(fixture.files, ref("monthly", "2025-03"), monthStartSec("2025-03"), 28 * 24, 100);
+    for (const day of ["2025-03-29", "2025-03-30", "2025-03-31"]) {
+      addArchive(fixture.files, ref("daily", day), Date.parse(`${day}T00:00:00Z`) / 1000, 24, 200);
+    }
+
+    const result = await fetchDataset(options(fixture, store, root, { to: "2025-03" }));
+
+    expect(result.months[0]).toMatchObject({ action: "archive+daily", total: 744, complete: true });
+    expect(result.months[0].repairedDays).toEqual(["2025-03-29", "2025-03-30", "2025-03-31"]);
+    expect(store.readMeta(KEY, "2025-03")?.count).toBe(744);
+    expect(store.readMeta(KEY, "2025-03")?.sources).toEqual(["binance-archive"]);
+    expect(fixture.restCalls).toBe(0);
+  });
+
+  it("repairs an already complete month only when asked to", async () => {
+    const fixture = makeFixture();
+    addArchive(fixture.files, ref("monthly", "2025-03"), monthStartSec("2025-03"), 28 * 24, 100);
+    await fetchDataset(options(fixture, store, root, { to: "2025-03" }));
+    expect(store.readMeta(KEY, "2025-03")?.count).toBe(28 * 24);
+
+    for (const day of ["2025-03-29", "2025-03-30", "2025-03-31"]) {
+      addArchive(fixture.files, ref("daily", day), Date.parse(`${day}T00:00:00Z`) / 1000, 24, 200);
+    }
+
+    const plain = await fetchDataset(options(fixture, store, root, { to: "2025-03" }));
+    expect(plain.months[0].action).toBe("skipped");
+    expect(plain.requests.dailyArchives).toBe(0);
+
+    const repaired = await fetchDataset(options(fixture, store, root, { to: "2025-03", repair: true }));
+    expect(repaired.months[0]).toMatchObject({ action: "archive+daily", total: 744, added: 72 });
+    expect(repaired.requests.archives).toBe(0);
+    expect(store.readMeta(KEY, "2025-03")?.count).toBe(744);
+  });
+
+  it("keeps the short month when the daily archives cannot help either", async () => {
+    const fixture = makeFixture();
+    addArchive(fixture.files, ref("monthly", "2025-03"), monthStartSec("2025-03"), 28 * 24, 100);
+
+    const result = await fetchDataset(options(fixture, store, root, { to: "2025-03" }));
+
+    expect(result.months[0]).toMatchObject({ action: "archive", total: 28 * 24, complete: true });
+    expect(result.months[0].repairedDays).toBeUndefined();
+  });
+
+  it("leaves a partial day alone instead of spending a request on it", async () => {
+    const fixture = makeFixture();
+    // 18 of 24 bars on the last day — an outage, not a lost day.
+    addArchive(fixture.files, ref("monthly", "2025-03"), monthStartSec("2025-03"), 30 * 24 + 18, 100);
+    addArchive(fixture.files, ref("daily", "2025-03-31"), Date.parse("2025-03-31T00:00:00Z") / 1000, 24, 200);
+
+    const result = await fetchDataset(options(fixture, store, root, { to: "2025-03" }));
+
+    expect(result.months[0].action).toBe("archive");
+    expect(result.requests.dailyArchives).toBe(0);
+    expect(store.readMeta(KEY, "2025-03")?.count).toBe(30 * 24 + 18);
   });
 
   it("skips a month that is already complete", async () => {
