@@ -23,7 +23,13 @@
     "market-stats": "node --max-old-space-size=8192 --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/tsLoader.mjs scripts/marketStats.ts",
     "streak-study": "node --max-old-space-size=6144 --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/tsLoader.mjs scripts/streakStudy.ts",
     "screen-features": "node --max-old-space-size=8192 --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/tsLoader.mjs scripts/featureScreening.ts",
-    "calibrate:costs": "node --experimental-transform-types --disable-warning=ExperimentalWarning --max-old-space-size=6144 --import ./scripts/tsLoader.mjs scripts/calibrateCosts.ts"
+    "calibrate:costs": "node --experimental-transform-types --disable-warning=ExperimentalWarning --max-old-space-size=6144 --import ./scripts/tsLoader.mjs scripts/calibrateCosts.ts",
+    "metrics:fetch": "node --experimental-transform-types --disable-warning=ExperimentalWarning --max-old-space-size=4096 --import ./scripts/tsLoader.mjs scripts/fetchMetrics.ts",
+    "metrics:validate": "node --experimental-transform-types --disable-warning=ExperimentalWarning --max-old-space-size=4096 --import ./scripts/tsLoader.mjs scripts/fetchMetrics.ts --validate-only",
+    "screen-positioning": "node --max-old-space-size=8192 --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/tsLoader.mjs scripts/positioningScreen.ts",
+    "cascade:xsec": "node --max-old-space-size=8192 --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/tsLoader.mjs scripts/cascadeCrossSection.ts",
+    "cascade:portfolio": "node --max-old-space-size=8192 --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/tsLoader.mjs scripts/cascadePortfolioRun.ts",
+    "positioning-control": "node --max-old-space-size=8192 --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/tsLoader.mjs scripts/positioningControl.ts"
   },
   "dependencies": {
     "bybit-api": "^4.6.2",
