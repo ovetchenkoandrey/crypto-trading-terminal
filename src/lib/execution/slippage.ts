@@ -66,16 +66,16 @@ export function describeSlippage(cfg: SlippageSettings): string {
 /* ─────────────────────────────────────────────────────────────────────────────
    Context multipliers.
 
-   Liquidity is not constant across the clock: 03:00-06:00 UTC is the global
-   trough, 21:00-23:00 the secondary one, and weekend spreads on BTC run more
-   than double the weekday ones. A night mean-reversion strategy trades exactly
-   in those hours, so a flat slippage figure flatters it.
-
    These sit on top of applySlippage as a multiplier on the delta it produced —
    the base models keep their behaviour and their existing tests.
 
    The hour ALWAYS comes from the bar timestamp, never from the system clock:
    otherwise a backtest is priced by whenever it happened to be launched.
+
+   The defaults below were guesses until 26.08.2026 and are now measurements.
+   The headline: on BTCUSDT perpetual the clock barely moves the cost of a trade
+   of our size. Full method, sample and intervals in docs/cost-calibration.md;
+   re-derive with `npm run calibrate:costs`.
    ───────────────────────────────────────────────────────────────────────────── */
 
 export interface SlippageContextSettings {
@@ -95,10 +95,22 @@ export interface SlippageContextSettings {
 export const DEFAULT_SLIPPAGE_CONTEXT: SlippageContextSettings = {
   enabled:                 true,
   deadHoursUtc:            [3, 4, 5, 21, 22],
-  deadHourMultiplier:      1.75,
-  weekendMultiplier:       2,
+  // Measured 1.00. Over 24 sample days of Bybit BTCUSDT L1 (576 hours of book
+  // time, 4.1M priced instants) the mean taker cost in these hours came out at
+  // 0.993 of the rest of the day and the spread at 0.992 — the trough hours are
+  // marginally cheaper, not 75% dearer. The old 1.75 was borrowed from FX.
+  deadHourMultiplier:      1,
+  // Measured 1.030 on taker cost (1.032 on spread). Depth at the touch is a
+  // different story — the weekend book is 28% thinner — but our order is ~200
+  // USDT against a ~215k USDT touch, so it is priced by the spread, not depth.
+  weekendMultiplier:       1.03,
   volatilityEnabled:       true,
-  volatilityRefPct:        0.2,
+  // Measured against the cost-by-bar-range curve: cost is flat up to a 0.2%
+  // minute range and roughly doubles by 0.6%. A linear ramp from 0.3% tracks
+  // that; the old 0.2% made every ordinary bar expensive (median range <= 0.1%).
+  volatilityRefPct:        0.3,
+  // Weakly supported: only 8 bars in 34,560 had a range above 0.8%, where the
+  // measured multiplier was 2.4-2.8. Extrapolation, not measurement.
   volatilityMaxMultiplier: 3,
   maxMultiplier:           4,
 };

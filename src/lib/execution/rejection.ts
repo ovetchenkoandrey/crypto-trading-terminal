@@ -6,8 +6,10 @@
 // a bad price — is modelling a different exchange.
 //
 // The second half is queue position: a resting limit order touched by a bar has
-// not necessarily been filled. Optimistic limit fills are what make grid backtests
-// look printable.
+// not necessarily been filled. Measurement narrowed where that doubt belongs —
+// once the tape trades *through* the price, price priority settles the fill and
+// no queue assumption is involved; the only genuinely uncertain case is the bar
+// whose extreme lands on the level and goes no further.
 //
 // Determinism is non-negotiable. Math.random() would make two runs of the same
 // backtest disagree, and then no result can be trusted or reproduced. Every draw
@@ -57,19 +59,53 @@ export interface RejectionSettings {
 /**
  * Reference magnitude from 10.10.2025: top-of-book depth collapsed by more than
  * 90% and spreads went from single-digit bps to double-digit percent.
+ *
+ * Partly corroborated 26.08.2026. Across 147 days of Binance BTCUSDT bookDepth
+ * snapshots, 10.10.2025 is the single worst: the +-1% band fell to 0.120 of that
+ * day's own median at 21:22 UTC, against a median day's trough of 0.685 and a
+ * fifth-percentile day's 0.459. That band is a long way from the touch and the
+ * touch empties first, so 0.08 remains an assumption — but the day it is named
+ * after is now measured, and it is an outlier by a factor of four.
  */
 export const BOOK_EVAPORATION_DEPTH_REMAINING = 0.08;
 export const BOOK_EVAPORATION_SPREAD_BPS = 500;
 
+/**
+ * Calibrated 26.08.2026 against 24 sample days each of Bybit BTCUSDT and
+ * ETHUSDT L1 quotes and trade tape — 73M quotes, 84M trades, 887k simulated
+ * limit levels. Method, sample sizes and confidence intervals are in
+ * docs/cost-calibration.md; `npm run calibrate:costs` re-derives them.
+ */
 export const DEFAULT_REJECTION_SETTINGS: RejectionSettings = {
   enabled:                     true,
   slippageToleranceBps:        50,
-  baseRejectProb:              0.001,
+  // Not a measurement of exchange behaviour. Over 4.1M sampled instants, the
+  // touch was never more than 50 bps away 250 ms after the decision — zero
+  // hits, so the band-miss rate is below 7e-7 at 95%. 1e-4 is the measured
+  // rate at a 5 bps band, kept as a deliberately generous stand-in for the
+  // operational failures (API errors, rate limits) public data cannot show.
+  baseRejectProb:              0.0001,
+  // Unmeasured. A cap, not an estimate: with the values above it never binds
+  // outside a stress window.
   maxRejectProb:               0.25,
+  // Measured: the 90th percentile of the one-minute bar range is 0.2%, so the
+  // volatility factor stays at 1 for nine bars in ten.
   volatilityRefPct:            0.2,
   volatilityMaxFactor:         5,
-  limitFillProbability:        0.6,
-  limitFullFillPenetrationBps: 5,
+  // Measured 0.30, pooled over BTCUSDT and ETHUSDT. When the bar's extreme lands
+  // exactly on the limit price (120,608 such levels), a FIFO queue starting
+  // behind everything displayed fills 23.8% of the time on BTC [23.5, 24.2] and
+  // 16.4% on ETH [16.1, 16.7]; a uniform queue position gives 35.2% and 23.8%;
+  // the front of the queue 78.7% and 52.0%. The uniform figure is the expected
+  // value under the only neutral assumption available, and it leans low because
+  // cancellations in the queue ahead are invisible to the measurement.
+  limitFillProbability:        0.3,
+  // Measured, and the number that actually mattered. One BTCUSDT tick is about
+  // 0.01 bps; once the tape prints through the level at all, the fill is settled
+  // by price priority rather than by queue, and the measured rate is 90-100% in
+  // every bucket above zero on both symbols. The old 5 bps ramp withheld fills
+  // from limit orders the market had demonstrably traded through.
+  limitFullFillPenetrationBps: 0.01,
   stressWindows:               [],
 };
 

@@ -169,21 +169,20 @@ describe("timeOfDayMultiplier", () => {
     expect(timeOfDayMultiplier(WED_12)).toBe(1);
   });
 
-  it("raises slippage in the 03:00-06:00 UTC trough", () => {
-    expect(timeOfDayMultiplier(WED_04)).toBeCloseTo(1.75, 10);
+  it("leaves the 03:00-06:00 UTC trough alone, as measured", () => {
+    expect(timeOfDayMultiplier(WED_04)).toBeCloseTo(DEFAULT_SLIPPAGE_CONTEXT.deadHourMultiplier, 10);
+    expect(timeOfDayMultiplier(WED_22)).toBeCloseTo(DEFAULT_SLIPPAGE_CONTEXT.deadHourMultiplier, 10);
   });
 
-  it("raises slippage in the 21:00-23:00 UTC window", () => {
-    expect(timeOfDayMultiplier(WED_22)).toBeCloseTo(1.75, 10);
-  });
-
-  it("doubles on the weekend", () => {
-    expect(timeOfDayMultiplier(SAT_12)).toBeCloseTo(2, 10);
+  it("adds the measured weekend premium", () => {
+    expect(timeOfDayMultiplier(SAT_12)).toBeCloseTo(1.03, 10);
   });
 
   it("compounds weekend and dead hour, capped by maxMultiplier", () => {
-    expect(timeOfDayMultiplier(SAT_04)).toBeCloseTo(3.5, 10);
-    expect(timeOfDayMultiplier(SAT_04, ctxCfg({ maxMultiplier: 3 }))).toBeCloseTo(3, 10);
+    expect(timeOfDayMultiplier(SAT_04, ctxCfg({ deadHourMultiplier: 2, weekendMultiplier: 1.75 })))
+      .toBeCloseTo(3.5, 10);
+    expect(timeOfDayMultiplier(SAT_04, ctxCfg({ deadHourMultiplier: 2, weekendMultiplier: 1.75, maxMultiplier: 3 })))
+      .toBeCloseTo(3, 10);
   });
 
   it("is 1 when disabled", () => {
@@ -195,17 +194,22 @@ describe("timeOfDayMultiplier", () => {
   });
 
   it("honours a custom dead-hour list", () => {
-    expect(timeOfDayMultiplier(WED_12, ctxCfg({ deadHoursUtc: [12] }))).toBeCloseTo(1.75, 10);
+    expect(timeOfDayMultiplier(WED_12, ctxCfg({ deadHoursUtc: [12], deadHourMultiplier: 1.75 }))).toBeCloseTo(1.75, 10);
   });
 });
 
 describe("volatilityMultiplier", () => {
   it("is 1 on a bar at the reference range", () => {
-    expect(volatilityMultiplier({ high: 100.2, low: 100, close: 100 })).toBeCloseTo(1, 6);
+    expect(volatilityMultiplier({ high: 100.3, low: 100, close: 100 })).toBeCloseTo(1, 6);
   });
 
   it("scales with the bar range", () => {
-    expect(volatilityMultiplier({ high: 100.4, low: 100, close: 100 })).toBeCloseTo(2, 6);
+    expect(volatilityMultiplier({ high: 100.6, low: 100, close: 100 })).toBeCloseTo(2, 6);
+  });
+
+  it("leaves an ordinary minute bar alone", () => {
+    // Measured median one-minute range on BTCUSDT is at or below 0.1%.
+    expect(volatilityMultiplier({ high: 100.1, low: 100, close: 100 })).toBe(1);
   });
 
   it("never discounts a calm bar", () => {
@@ -226,13 +230,25 @@ describe("volatilityMultiplier", () => {
 
 describe("slippageMultiplier", () => {
   it("multiplies the time and volatility components", () => {
-    const m = slippageMultiplier({ barTime: WED_04, bar: { high: 100.4, low: 100, close: 100 } });
-    expect(m).toBeCloseTo(3.5, 6);
+    const m = slippageMultiplier(
+      { barTime: SAT_04, bar: { high: 100.6, low: 100, close: 100 } },
+      ctxCfg({ deadHourMultiplier: 1.75 }),
+    );
+    expect(m).toBeCloseTo(1.75 * 1.03 * 2, 6);
   });
 
   it("respects the overall cap", () => {
-    const m = slippageMultiplier({ barTime: SAT_04, bar: { high: 110, low: 100, close: 100 } });
+    const m = slippageMultiplier(
+      { barTime: SAT_04, bar: { high: 110, low: 100, close: 100 } },
+      ctxCfg({ deadHourMultiplier: 2, weekendMultiplier: 2 }),
+    );
     expect(m).toBe(DEFAULT_SLIPPAGE_CONTEXT.maxMultiplier);
+  });
+
+  it("cannot reach the cap on the calibrated defaults", () => {
+    const worst = slippageMultiplier({ barTime: SAT_04, bar: { high: 110, low: 100, close: 100 } });
+    expect(worst).toBeLessThan(DEFAULT_SLIPPAGE_CONTEXT.maxMultiplier);
+    expect(worst).toBeCloseTo(1.03 * DEFAULT_SLIPPAGE_CONTEXT.volatilityMaxMultiplier, 10);
   });
 
   it("is 1 when the context model is off", () => {
@@ -249,10 +265,11 @@ describe("applySlippageWithContext", () => {
     expect(out).toBeCloseTo(applySlippage(100, "buy", 1, undefined, base), 10);
   });
 
-  it("scales the delta, not the price, in a dead hour", () => {
-    expect(applySlippageWithContext(100, "buy", 1, undefined, base, { barTime: WED_04 }))
+  it("scales the delta, not the price", () => {
+    const dead = { ...base, context: ctxCfg({ deadHourMultiplier: 1.75 }) };
+    expect(applySlippageWithContext(100, "buy", 1, undefined, dead, { barTime: WED_04 }))
       .toBeCloseTo(101.75, 10);
-    expect(applySlippageWithContext(100, "sell", 1, undefined, base, { barTime: WED_04 }))
+    expect(applySlippageWithContext(100, "sell", 1, undefined, dead, { barTime: WED_04 }))
       .toBeCloseTo(98.25, 10);
   });
 
@@ -293,7 +310,7 @@ describe("describeSlippageContext", () => {
   it("mentions the dead hours and the caps", () => {
     const s = describeSlippageContext(DEFAULT_SLIPPAGE_CONTEXT);
     expect(s).toContain("dead h3,4,5,21,22");
-    expect(s).toContain("weekend x2");
+    expect(s).toContain("weekend x1.03");
     expect(s).toContain("cap x4");
   });
 

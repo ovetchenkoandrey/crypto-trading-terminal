@@ -299,3 +299,26 @@ describe("custom draw key", () => {
     expect(b.roll).not.toBe(a.roll);
   });
 });
+
+describe("calibrated defaults", () => {
+  // Guards the numbers docs/cost-calibration.md was written against. Change them
+  // only alongside a re-run of `npm run calibrate:costs` and an updated report.
+  it("carries the measured limit-queue values", () => {
+    expect(DEFAULT_REJECTION_SETTINGS.limitFillProbability).toBe(0.3);
+    expect(DEFAULT_REJECTION_SETTINGS.limitFullFillPenetrationBps).toBe(0.01);
+    expect(DEFAULT_REJECTION_SETTINGS.baseRejectProb).toBe(0.0001);
+  });
+
+  it("fills a limit the tape traded through, and doubts one it only reached", () => {
+    const touched = evaluateRejection(order({ type: "limit" }), DEFAULT_REJECTION_SETTINGS, { roll: 0.5 });
+    expect(touched.accepted).toBe(false);
+    expect(touched.reason).toBe("queue_not_reached");
+
+    const throughIt = evaluateRejection(
+      order({ type: "limit", penetrationBps: 0.02 }),
+      DEFAULT_REJECTION_SETTINGS,
+      { roll: 0.999 },
+    );
+    expect(throughIt.accepted).toBe(true);
+  });
+});
