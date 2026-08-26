@@ -1,5 +1,11 @@
 // Night mean reversion — fade a Bollinger excursion during the low-liquidity
-// session and exit on the return to the moving average.
+// session and exit once the excursion has settled.
+//
+// "Settled" has no single definition, so it is a parameter: `exitRule` picks
+// between the moving average, the opposite band, a fixed percentage from the
+// entry, and a fraction of the way back to the mean. `exitMode` is a separate
+// axis — it says whether that price is taken at market on a bar close or left
+// resting as a reduce-only limit.
 //
 // The strategy only acts inside `onBar`, so every decision is taken on a closed
 // bar and every price it reads comes from `ctx.history`, which is cut at that
@@ -24,7 +30,23 @@ const DEFAULT_BAR_SECONDS = HOUR_SECONDS;
 /** Bars of ATR warm-up kept in the window; Wilder seeding bias decays below 1e-4. */
 const ATR_WARMUP_FACTOR = 10;
 
+/** How the exit is executed once its price is known. */
 export type ExitMode = "market" | "limit";
+/**
+ * Where the exit sits. All four answer the same question — "has the excursion
+ * settled?" — with a different definition of settled:
+ *
+ *  - `mean`    the moving average, optionally shifted by `exitSigma` sigmas.
+ *              Settled = the price is back where the window says it belongs.
+ *  - `band`    the opposite Bollinger line. Settled = the excursion has fully
+ *              reversed and overshot the other way.
+ *  - `pct`     a fixed percentage away from the entry. Settled = the bounce has
+ *              paid a fixed amount, regardless of what the band does.
+ *  - `partial` a fraction of the way from the entry to the `mean` target.
+ *              Settled = most of the snap-back has happened; `exitFraction` 1
+ *              is exactly `mean`.
+ */
+export type ExitRule = "mean" | "band" | "pct" | "partial";
 export type StopMode = "atr" | "pct" | "sigma";
 
 export interface NightMeanReversionParams {
@@ -36,7 +58,10 @@ export interface NightMeanReversionParams {
   allowLong: boolean;
   allowShort: boolean;
   exitMode: ExitMode;
+  exitRule: ExitRule;
   exitSigma: number;
+  exitPct: number;
+  exitFraction: number;
   stopMode: StopMode;
   stopAtrMult: number;
   stopPct: number;
@@ -116,7 +141,12 @@ export function parseNightMrParams(raw: Record<string, number | string>): NightM
     allowLong:           flag(raw.allowLong, true),
     allowShort:          flag(raw.allowShort, true),
     exitMode:            oneOf(raw.exitMode, ["market", "limit"] as const, "market"),
+    exitRule:            oneOf(raw.exitRule, ["mean", "band", "pct", "partial"] as const, "mean"),
     exitSigma:           num(raw.exitSigma, 0),
+    exitPct:             Math.max(0, num(raw.exitPct, 0.5)),
+    // Clamped to (0, 1]: 0 would put the target on the entry itself and fire on
+    // the first bar, above 1 would overshoot the mean — that is what `band` is.
+    exitFraction:        Math.min(1, Math.max(0.01, num(raw.exitFraction, 0.5))),
     stopMode:            oneOf(raw.stopMode, ["atr", "pct", "sigma"] as const, "atr"),
     stopAtrMult:         Math.max(0, num(raw.stopAtrMult, 1.5)),
     stopPct:             Math.max(0, num(raw.stopPct, 0.8)),
@@ -382,7 +412,7 @@ class NightMeanReversionBot implements Bot {
       return true;
     }
 
-    const target = this.exitTarget(position.side, snap);
+    const target = this.exitTarget(position.side, snap, position.entryPrice);
 
     if (p.exitMode === "market") {
       const reached = position.side === "buy" ? snap.close >= target : snap.close <= target;
@@ -396,8 +426,38 @@ class NightMeanReversionBot implements Bot {
     return false;
   }
 
-  /** Mean-reversion target: the moving average, shifted by `exitSigma` bands. */
-  private exitTarget(side: Side, snap: Snapshot): number {
+  /**
+   * Price at which the excursion counts as settled. `anchor` is where the trade
+   * was entered — the entry price once a position exists, the signal close while
+   * the entry is still in flight. Only `pct` and `partial` read it; the other
+   * two are defined by the bands alone and follow them as they move.
+   */
+  private exitTarget(side: Side, snap: Snapshot, anchor: number): number {
+    const p = this.p;
+    switch (p.exitRule) {
+      case "band":
+        return side === "buy" ? snap.upper : snap.lower;
+      case "pct": {
+        const k = p.exitPct / 100;
+        return side === "buy" ? anchor * (1 + k) : anchor * (1 - k);
+      }
+      case "partial": {
+        const mean = this.meanTarget(side, snap);
+        return anchor + p.exitFraction * (mean - anchor);
+      }
+      case "mean":
+      default:
+        return this.meanTarget(side, snap);
+    }
+  }
+
+  /** True when the exit price is measured from the entry rather than the bands. */
+  private anchoredExit(): boolean {
+    return this.p.exitRule === "pct" || this.p.exitRule === "partial";
+  }
+
+  /** The moving average, shifted by `exitSigma` bands toward the entry side. */
+  private meanTarget(side: Side, snap: Snapshot): number {
     const shift = this.p.exitSigma * snap.sd;
     return side === "buy" ? snap.mid - shift : snap.mid + shift;
   }
@@ -517,8 +577,13 @@ class NightMeanReversionBot implements Bot {
     this.entriesPlaced += 1;
     if (this.entryBar === null) this.entryBar = index;
 
-    if (p.exitMode === "limit") {
-      this.refreshExitLimit(ctx, side, (position?.qty ?? 0) + entry.qty, this.exitTarget(side, snap));
+    // A band-derived target is known before the fill, so the limit can rest from
+    // the same bar as the stop. `pct` and `partial` measure from the entry price,
+    // which the market order will not settle until the next bar's open — pricing
+    // them off the signal close would put the order somewhere the parameter never
+    // asked for. Those two wait for `manageOpen` to see the real entry.
+    if (p.exitMode === "limit" && !this.anchoredExit()) {
+      this.refreshExitLimit(ctx, side, (position?.qty ?? 0) + entry.qty, this.exitTarget(side, snap, snap.close));
     }
   }
 
@@ -596,7 +661,10 @@ export const nightMeanReversionFactory: BotFactory = {
     allowLong: 1,
     allowShort: 1,
     exitMode: "market",
+    exitRule: "mean",
     exitSigma: 0,
+    exitPct: 0.5,
+    exitFraction: 0.5,
     stopMode: "atr",
     stopAtrMult: 1.5,
     stopPct: 0.8,
@@ -621,7 +689,10 @@ export const nightMeanReversionFactory: BotFactory = {
     { key: "allowLong",           label: "Разрешить лонги (0/1)",         type: "number", min: 0,  max: 1,   step: 1 },
     { key: "allowShort",          label: "Разрешить шорты (0/1)",         type: "number", min: 0,  max: 1,   step: 1 },
     { key: "exitMode",            label: "Выход: market / limit",         type: "string" },
+    { key: "exitRule",            label: "Цель: mean / band / pct / partial", type: "string" },
     { key: "exitSigma",           label: "Смещение цели, сигм",           type: "number", min: -3, max: 3,   step: 0.1 },
+    { key: "exitPct",             label: "Цель pct, % от входа",          type: "number", min: 0,  max: 20,  step: 0.05 },
+    { key: "exitFraction",        label: "Цель partial, доля пути к средней", type: "number", min: 0.01, max: 1, step: 0.05 },
     { key: "stopMode",            label: "Стоп: atr / pct / sigma",       type: "string" },
     { key: "stopAtrMult",         label: "Стоп, множитель ATR",           type: "number", min: 0,  max: 10,  step: 0.1 },
     { key: "stopPct",             label: "Стоп, % от цены",               type: "number", min: 0,  max: 20,  step: 0.1 },

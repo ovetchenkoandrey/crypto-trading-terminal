@@ -80,6 +80,18 @@ const secondDip = (): Candle[] => series(0, [
   flat(70),
 ]);
 
+/**
+ * Dips at bar 7, then retraces only half way: bar 8 closes at 94 while the mean
+ * sits at 97. A partial target is reached, the mean target is not.
+ */
+const halfBack = (): Candle[] => series(0, [
+  ...WARMUP,
+  DIP,
+  { o: 90, h: 95, l: 89, c: 94 },
+  flat(94),
+  flat(94),
+]);
+
 /** Dips at bar 7 and closes back inside the band at bar 8 — the confirmed bounce. */
 const bounce = (): Candle[] => series(0, [
   ...WARMUP,
@@ -194,17 +206,26 @@ describe("params", () => {
     expect(p.sessionEndHour).toBe(6);
     expect(p.stopMode).toBe("atr");
     expect(p.exitMode).toBe("market");
+    expect(p.exitRule).toBe("mean");
     expect(p.closeOutsideSession).toBe(true);
     expect(p.maxOpenPositions).toBe(1);
   });
 
   it("falls back to defaults on junk and normalises hours", () => {
-    const p = parseNightMrParams({ bbPeriod: "abc", exitMode: "nonsense", stopMode: "", sessionStartHour: 27, sessionEndHour: -2 });
+    const p = parseNightMrParams({ bbPeriod: "abc", exitMode: "nonsense", exitRule: "wat", stopMode: "", sessionStartHour: 27, sessionEndHour: -2 });
     expect(p.bbPeriod).toBe(20);
     expect(p.exitMode).toBe("market");
+    expect(p.exitRule).toBe("mean");
     expect(p.stopMode).toBe("atr");
     expect(p.sessionStartHour).toBe(3);
     expect(p.sessionEndHour).toBe(22);
+  });
+
+  it("clamps the retrace fraction into (0, 1]", () => {
+    expect(parseNightMrParams({ exitFraction: 0 }).exitFraction).toBe(0.01);
+    expect(parseNightMrParams({ exitFraction: -3 }).exitFraction).toBe(0.01);
+    expect(parseNightMrParams({ exitFraction: 5 }).exitFraction).toBe(1);
+    expect(parseNightMrParams({ exitFraction: 0.25 }).exitFraction).toBe(0.25);
   });
 });
 
@@ -249,6 +270,58 @@ describe("night mean reversion — entry and exit", () => {
     expect(exit?.price).toBeCloseTo(98, 6);   // mid of the signal bar
     expect(result.trades).toHaveLength(1);
     expect(result.trades[0].exitPrice).toBeCloseTo(98, 6);
+  });
+
+  it("holds past the mean when the target is the opposite band", async () => {
+    // Bar 8 closes at 98, over mid 97.667 — enough for `mean`, short of upper
+    // 106.5 — so the band exit is still holding when the fixture ends.
+    const result = await run(revert(), { exitRule: "band" });
+
+    expect(result.trades).toHaveLength(0);
+    expect(result.positions).toHaveLength(1);
+    expect(result.positions[0].entryPrice).toBe(90);
+  });
+
+  it("takes a fixed percentage off the entry price", async () => {
+    // Entry fills at 90 on bar 8, so the target is 90 x 1.05 = 94.5 — measured
+    // from the fill, not from the 88 signal close it was decided on.
+    const result = await run(revert(), { exitRule: "pct", exitPct: 5, exitMode: "limit" });
+
+    const exit = result.orders.find((o) => o.type === "limit" && o.side === "sell");
+    expect(exit?.price).toBeCloseTo(94.5, 6);
+  });
+
+  it("does not rest an entry-anchored limit before the entry has filled", async () => {
+    // The stop is bracketed at signal time; a pct target cannot be, because the
+    // entry price it measures from does not exist yet.
+    const anchored = await run(revert(), { exitRule: "pct", exitPct: 5, exitMode: "limit" });
+    const banded = await run(revert(), { exitRule: "mean", exitMode: "limit" });
+
+    const firstLimit = (r: typeof anchored) =>
+      r.orders.filter((o) => o.type === "limit" && o.side === "sell")[0];
+    // Band targets rest from the signal bar, entry-anchored ones a bar later.
+    expect(firstLimit(banded).ts).toBeLessThan(firstLimit(anchored).ts);
+  });
+
+  it("exits on a half retrace that never reaches the mean", async () => {
+    // Entry 90, mean 97 → half way is 93.5, and bar 8 closes at 94.
+    const partial = await run(halfBack(), { exitRule: "partial", exitFraction: 0.5 });
+    const mean = await run(halfBack(), { exitRule: "mean" });
+
+    expect(partial.trades).toHaveLength(1);
+    expect(partial.trades[0].entryPrice).toBe(90);
+    expect(partial.trades[0].exitPrice).toBe(94);
+    // The same retrace leaves the mean exit still holding when the series ends.
+    expect(mean.trades).toHaveLength(0);
+    expect(mean.positions).toHaveLength(1);
+  });
+
+  it("collapses onto the mean target when the retrace fraction is 1", async () => {
+    const partial = await run(revert(), { exitRule: "partial", exitFraction: 1 });
+    const mean = await run(revert(), { exitRule: "mean" });
+
+    expect(partial.trades).toHaveLength(1);
+    expect(partial.trades[0].exitPrice).toBe(mean.trades[0].exitPrice);
   });
 
   it("waits for the close back inside the band when reentry is required", async () => {
