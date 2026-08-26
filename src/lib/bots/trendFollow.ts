@@ -355,7 +355,7 @@ class TrendFollowBot implements Bot {
     if (bars.length < p.atrPeriod + 1) return;
     const series = atr(bars, p.atrPeriod);
     const value = series[series.length - 1];
-    if (!(value > 0)) return;
+    if (value === null || !(value > 0)) return;
 
     const distance = value * p.stopAtrMult;
     const stopPrice = position.side === "buy" ? price - distance : price + distance;

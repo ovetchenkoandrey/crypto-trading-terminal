@@ -127,7 +127,7 @@ export function rsi(values: number[], period: number): Series {
 }
 
 /** True Range per bar. The first bar has no previous close, so it uses high - low. */
-export function trueRange(candles: Candle[]): number[] {
+export function trueRange(candles: readonly Candle[]): number[] {
   const out: number[] = [];
   for (let i = 0; i < candles.length; i++) {
     const c = candles[i];
@@ -142,7 +142,7 @@ export function trueRange(candles: Candle[]): number[] {
 }
 
 /** ATR with Wilder smoothing, seeded by the SMA of the first `period` true ranges. */
-export function atr(candles: Candle[], period: number): Series {
+export function atr(candles: readonly Candle[], period: number): Series {
   const p = normalizePeriod(period);
   const out = emptySeries(candles.length);
   if (p === 0 || candles.length < p + 1) return out;
