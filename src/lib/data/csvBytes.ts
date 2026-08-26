@@ -18,7 +18,12 @@ const DOT = 0x2e;
 const ZERO = 0x30;
 const NINE = 0x39;
 
-export const MAX_FIELDS = 32;
+/**
+ * Widest row any archive here produces. Tardis `book_snapshot_25` is four fixed
+ * columns plus four per level, so 104; the cursor is two Int32Arrays of this
+ * length and is allocated once per file, which makes the headroom free.
+ */
+export const MAX_FIELDS = 128;
 
 export interface CsvCursor {
   /** Byte offset of the first character of each field in the current row. */

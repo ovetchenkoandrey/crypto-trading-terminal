@@ -29,7 +29,10 @@
     "screen-positioning": "node --max-old-space-size=8192 --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/tsLoader.mjs scripts/positioningScreen.ts",
     "cascade:xsec": "node --max-old-space-size=8192 --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/tsLoader.mjs scripts/cascadeCrossSection.ts",
     "cascade:portfolio": "node --max-old-space-size=8192 --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/tsLoader.mjs scripts/cascadePortfolioRun.ts",
-    "positioning-control": "node --max-old-space-size=8192 --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/tsLoader.mjs scripts/positioningControl.ts"
+    "positioning-control": "node --max-old-space-size=8192 --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/tsLoader.mjs scripts/positioningControl.ts",
+    "measure:liquidity": "node --experimental-transform-types --disable-warning=ExperimentalWarning --max-old-space-size=8192 --import ./scripts/tsLoader.mjs scripts/measureLiquidity.ts",
+    "factor:liquidity": "node --max-old-space-size=8192 --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/tsLoader.mjs scripts/factorLiquidityRun.ts",
+    "positioning-xsec": "node --max-old-space-size=8192 --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/tsLoader.mjs scripts/positioningCrossSection.ts"
   },
   "dependencies": {
     "bybit-api": "^4.6.2",

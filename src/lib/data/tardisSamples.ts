@@ -27,7 +27,12 @@ import { fetchBuffer, type HttpOptions } from "./http.ts";
 
 export const TARDIS_BASE = "https://datasets.tardis.dev/v1";
 
-export type TardisDataType = "quotes" | "trades" | "book_snapshot_25" | "derivative_ticker";
+export type TardisDataType =
+  | "quotes"
+  | "trades"
+  | "book_snapshot_5"
+  | "book_snapshot_25"
+  | "derivative_ticker";
 
 export interface TardisRef {
   exchange: string;
