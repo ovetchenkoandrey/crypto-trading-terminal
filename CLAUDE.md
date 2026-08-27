@@ -1,200 +1,173 @@
 # Trading app — заметки для Claude
 
-Electron + Vite + React 18 + Zustand терминал крипто-трейдинга (Bybit, lightweight-charts).
-Большая часть логики живёт в `src/` как обычное веб-приложение; Electron — тонкая обёртка
-(`electron/main.ts`, `electron/preload.ts`).
+Electron + Vite + React 18 + Zustand. Начиналось как терминал крипто-трейдинга
+под Bybit, сейчас это в первую очередь **платформа для проверки торговых
+гипотез**: честный бэктест-движок, walk-forward оптимизатор, локальный датасет
+на 23 млн минутных баров и слой статистического исследования.
 
-## TL;DR что делает программа
+Терминал (живые данные, чарт, стакан, ручные ордера, paper trading) работает и
+никуда не делся, но центр тяжести проекта переехал в исследование.
 
-MetaTrader-подобный десктоп-терминал для крипты на Bybit. Живые данные (spot + linear)
-по WebSocket, чарт на lightweight-charts с индикаторами и инструментами рисования,
-кликабельный стакан, ручное открытие позиций через Order Popup (F9 / клик в стакан /
-клик в чарт), оверлей открытых позиций и pending-ордеров поверх свечей, paper-trading
-с реалистичным slippage, два бота (Grid, DCA) на paper, тулбар + меню + терминал с
-табами Позиции / Ордера / История / Алерты / Журнал, Settings dialog на 10 вкладок.
-Реальный Bybit live mainnet — пока заглушка, всё трейдинговое крутится через PaperVenue.
+## Главное, что нужно знать перед работой
 
-## Архитектурная схема
+**Цель проекта — найти торговую стратегию с доказанным преимуществом, а не
+написать красивый бэктест.** Проверено и отбраковано десять гипотез. Прежде чем
+предлагать одиннадцатую, прочитай `docs/strategy-ideas.md` и
+`docs/market-stats.md` — там записано, что уже проверено и почему не работает.
 
+**Мы измерили рынок, и это меняет постановку задачи:**
+
+- Направленной предсказуемости выше уровня издержек на минутах и часах нет.
+  Оракульный расчёт: если знать направление каждой минуты заранее, на BTC это
+  59% депозита в день при 158% комиссий — **даже идеальное предсказание
+  убыточно**. Первый горизонт, где всеведущий трейдер выходит в плюс, — 15 минут.
+- Порог рентабельности по размеру цели: **0.45% при рыночных входах**, 0.16%
+  при мейкерском исполнении с обеих сторон. Всё, что мельче, обречено
+  арифметически, независимо от качества сигнала.
+- Структура живёт в **активные часы** (13–17 UTC), а не в ночные. Ночная
+  сессия BTC на нашем разрешении неотличима от случайного блуждания.
+- Волатильность предсказуема на три порядка лучше направления (R² 0.667
+  против 0.0004), но в направленный эдж это не конвертируется — проверено прямо.
+- Скрининг 63 ценовых признаков: структура есть (197 срезов переживают
+  Бонферрони), но максимальный эффект 10.1 б.п. при круге 11.
+- Единственное, что дошло до конца, — кросс-секционный фактор на данных
+  позиционирования (`docs/positioning-data.md`), и тот держится на одной
+  удачной монете.
+
+## Методологические правила, оплаченные отбракованными гипотезами
+
+Нарушение любого из них делает результат недействительным.
+
+1. **Порог, посчитанный по всей выборке, — заглядывание в будущее.** Гипотеза
+   о ликвидационных каскадах давала +58 б.п. при полновыборочном пороге
+   процентиля и +0.04 при честном скользящем. Все пороги, квантили и границы
+   считаются только по прошлым данным.
+
+2. **Считай число испытаний.** Чем шире перебор, тем выше планка для лучшего
+   результата. Лучший из 42 комбинаций с z = 2.3 — это ровно то, что даёт
+   чистый шум (ожидаемый максимум 2.2). Оптимизатор считает поправки сам
+   (deflated Sharpe и Reality Check), пользуйся им, а не глазами.
+
+3. **Одновременность убивает ширину охвата.** 68.7% каскадов случаются в одну
+   минуту на разных монетах: сорок символов дают не сорок наблюдений, а одно,
+   посчитанное сорок раз. Всегда считай **эффективное** число независимых
+   наблюдений и кластерные ошибки по временным срезам.
+
+4. **Плато, а не пик.** Если соседние значения параметра дают резко худший
+   результат — это подгонка. Оптимизатор рисует окрестность победителя.
+
+5. **Проверяй вклад отдельных дат и символов.** Прибыль, сосредоточенная в
+   трёх днях из 547 или в одной монете из 44, — артефакт.
+
+6. **Диагностика до оптимизации.** Прогон с нулевыми и с полными издержками
+   отвечает на главный вопрос: убыточна без издержек → эджа нет; прибыльна
+   без и убыточна с → эдж съеден исполнением; прибыльна в обоих → идти дальше.
+
+7. **Отрицательный результат — полноценный результат.** Десять раз уже так
+   было. Не подгоняй параметры, пока цифра не станет красивой.
+
+## Данные
+
+`data/` (в .gitignore, 8.7 ГБ). Бинарное хранилище фиксированной ширины,
+48 байт на бар, файл на месяц.
+
+| Что | Период | Объём |
+|---|---|---|
+| Перпетуалы BTC, ETH, XRP, SOL | 2020-01 .. сейчас | 3.5 млн баров каждый |
+| Ещё 40 перпетуалов | 2022-01 .. сейчас | 111 млн баров суммарно |
+| Спот BTC, ETH | 2017-08 .. сейчас | 4.7 млн баров каждый |
+| История фандинга | по четырём перпам | — |
+| Метрики позиционирования | 44 символа, шаг 5 мин, с 2020-09 | 22 млн строк |
+| Срезы стакана | 44 символа, выборочные дни | 3.4 ГБ |
+
+Загрузка: `npm run data:fetch`, проверка `npm run data:validate`, обзор
+`npm run data:survey`. Метрики: `npm run metrics:fetch`.
+
+**Чему нельзя верить** — подробно в `docs/dataset.md`. Кратко: минуты внутри
+каскадов (19.05.2021 перп ETH торговался на 26% ниже спота), спот 2017 года
+(12% минут без сделок), объёмы несопоставимы между эпохами.
+
+## Как проверять гипотезы
+
+```bash
+npm run backtest -- --symbol BTCUSDT --from 2024-01 --to 2024-12 \
+  --interval 1m --signal 1h --bot night-mr --costs full
+npm run optimize -- --config runs/foo.json
+npm run screen-features        # скрининг предсказательной силы признаков
 ```
-Electron (electron/main.ts, preload.ts)         тонкая обёртка, окно, безопасный IPC
-        │
-        ▼
-React UI (src/components/*)                     ChartPane, OrderBook, Terminal,
-        │                                       Toolbar, MenuBar, OrderPopup, Settings…
-        ▼
-Zustand store (src/lib/store.ts, settings.ts)   marketData, ui, paper, bots,
-        │                                       orderPopup, settings + persist
-        ▼
-ExecutionVenue (src/lib/execution/*)            единая абстракция; VenueRouter
-        │                                       прокидывает на active venue
-   ┌────┴──────────┬────────┬──────────┐
-   ▼               ▼        ▼          ▼
-PaperVenue      DemoVenue  LiveVenue  BacktestVenue
-(работает)      (stub)     (stub)     (stub)
-   │
-   ▼
-Bybit WS/REST (src/lib/bybitWs.ts, bybit.ts, instruments.ts)
-```
 
-`ExecutionVenue.placeOrder` — единственная точка отправки ордера. Боты, OrderPopup,
-шорткаты — все идут через `venue` из `router.ts`. Никто не дёргает `paperEngine` напрямую.
+Издержки объявляются явно (`--costs none|fees|full`) — это обязательный
+параметр, а не умолчание. Отчёт печатает, под какими моделями шёл прогон.
+
+**Разделение данных.** In-sample по 2024-12-31, out-of-sample
+2025-01-01 .. 2026-08-26. Второй период открывается **один раз**, для финальной
+проверки готовой конфигурации, и никогда для подбора.
 
 ## Карта файлов
 
-Где что лежит — если правишь что-то слева, лезь в файлы справа.
-
 | Область | Файлы |
 |---|---|
-| Чарт, свечи, priceLines, fill markers (TradingOverlay) | `src/components/ChartPane.tsx` |
-| Мозаика 1/2/4 ячейки | `src/components/ChartMosaic.tsx` |
-| Индикаторы (SMA/EMA/RSI/MACD/Bollinger/Stochastic/ATR/Fractals) | `src/lib/indicators/*` + `registry.ts` |
-| Picker / params dialog индикаторов | `src/components/IndicatorPicker.tsx`, `IndicatorParamsDialog.tsx` |
-| Drawings (hline/trendline/fib/text) | `src/components/SvgDrawingOverlay.tsx`, `src/lib/drawings/*` |
-| Стакан (кликабельный) | `src/components/OrderBook.tsx` |
-| Order Popup, training toast | `src/components/order/OrderPopup.tsx`, `order/TrainingToast.tsx` |
-| Zustand store + типы | `src/lib/store.ts` |
-| Settings: типы и дефолты | `src/lib/settings.ts` |
-| Settings UI (10 табов) | `src/components/SettingsDialog.tsx` |
-| ExecutionVenue + Router | `src/lib/execution/router.ts`, `types.ts`, `PaperVenue.ts` |
-| Slippage модели | `src/lib/execution/slippage.ts` |
-| Paper matching engine | `src/lib/paper/engine.ts` |
-| Боты: Grid, DCA, базовый класс, manager | `src/lib/bots/*` |
-| Bot config UI | `src/components/bots/BotConfigDialog.tsx` |
-| Терминал (Позиции/Ордера/История/Алерты/Журнал) | `src/components/Terminal.tsx` |
-| Тулбар, меню | `src/components/Toolbar.tsx`, `MenuBar.tsx` |
-| Статус-бар | `src/components/StatusBar.tsx` |
-| Symbol picker, navigator | `src/components/SymbolPicker.tsx`, `Navigator.tsx` |
-| Bybit WebSocket клиент | `src/lib/bybitWs.ts` |
-| Bybit REST instruments | `src/lib/instruments.ts`, `bybit.ts`, `symbols.ts` |
-| Event bus (лог, бот-события) | `src/lib/eventBus.ts` |
-| Layout import/export | `src/lib/layoutIO.ts` |
-| Скрипты (close-all, export-csv…) | `src/lib/scripts.ts` |
-| Главный layout | `src/App.tsx`, `src/components/MainWindow.tsx` |
-| Electron обёртка | `electron/main.ts`, `electron/preload.ts` |
-| Стили (один большой файл) | `src/styles/global.css` |
-| Дизайн-мокапы | `design/*.html` |
-| Проектная документация | `ROADMAP.md`, `docs/decisions.md` |
+| Движок бэктеста | `src/lib/execution/backtest/{BacktestVenue,runner,clock,stats,aggregate}.ts` |
+| Модели издержек | `src/lib/execution/{fees,funding,slippage,rejection,instrumentRules}.ts` |
+| CLI прогонов и отчёты | `src/lib/backtest/{cliRun,runConfig,report}.ts`, `scripts/backtest.ts` |
+| Walk-forward оптимизатор | `src/lib/backtest/{optimizer,walkForward,paramGrid,multipleTesting,plateau,stitch}.ts` |
+| Статистика и скрининг | `src/lib/research/*` |
+| Данные | `src/lib/data/*`, `scripts/{fetchData,fetchMetrics,datasetSurvey}.ts` |
+| Индикаторы (63 признака) | `src/lib/indicators/{core,extended,microstructure}.ts` |
+| Стратегии | `src/lib/bots/*` + `registry.ts` |
+| Визуальный тестер | `src/components/tester/*` |
+| Терминал, чарт, стакан | `src/components/{ChartPane,ChartMosaic,OrderBook,Terminal,Toolbar}.tsx` |
+| Электрон-обёртка | `electron/{main,preload}.ts` |
 
-## Текущее состояние venue'ов
+## Документация
 
-| Venue | Состояние | Где |
-|---|---|---|
-| `paper` | Работает полноценно. Лимиты/маркеты/стопы, slippage по моделям из settings, fee, fills, P&L. | `src/lib/execution/PaperVenue.ts`, `src/lib/paper/engine.ts` |
-| `demo` | Stub — `throw "venue:demo not implemented"`. | `src/lib/execution/router.ts` |
-| `live` | Stub — то же самое. | `src/lib/execution/router.ts` |
-| `backtest` | Stub — то же самое. | `src/lib/execution/router.ts` |
+Читать в этом порядке:
 
-Реальные реализации демо/лайв/бектеста подменяются через `venue.register(mode, impl)`.
+- `docs/strategy-search.md` — цель, критерии приёмки, план.
+- `docs/market-stats.md` — что измерено про рынок. **Ключевой документ.**
+- `docs/strategy-ideas.md` — каталог гипотез с результатами и причинами отказа.
+- `docs/feature-screening.md` — скрининг 63 признаков.
+- `docs/positioning-data.md` — данные позиционирования, единственный живой след.
+- `docs/factor-liquidity.md` — измерение ликвидности вселенной.
+- `docs/cost-calibration.md` — откуда взялись числа в моделях издержек.
+- `docs/dataset.md` — состав данных и чему нельзя верить.
+- `docs/external-research.md` — что применяют снаружи.
+- `docs/backlog.md` — отложенное и известные ограничения.
+- `docs/tester-ui-spec.md` — ТЗ визуального тестера.
 
-## Инварианты которые нельзя нарушать
+## Инварианты
 
-- **Единая точка отправки ордера** — `venue.placeOrder()` из `src/lib/execution/router.ts`.
-  Боты, OrderPopup, шорткаты — всё через router. Никто не дёргает `paperEngine.place*` напрямую.
-- **Свечи: `time` в UTC-секундах**, не миллисекундах. Этого требует lightweight-charts.
-  Все REST/WS-парсеры должны давать секунды.
-- **Persist + новые поля Settings** — при добавлении поля в `Settings` проверь, что
-  `mergeDeep` в `store.ts` его подберёт при rehydrate (коммит `aa9a29e`). Иначе старый
-  снапшот выкинет новые значения на дефолтных юзерах.
-- **Bybit live mainnet — никогда автоматически.** Только руками пользователя. Любая
-  trading-логика тестируется на `PaperVenue` с синтетическими свечами.
-- **Стиль кода** — без эмодзи в файлах, без избыточных комментариев. Имя файла-теста
-  = имя исходника + `.test.ts`, лежит рядом.
-- **Тесты** — vitest, файлы рядом с исходниками. `npm test` — должно быть зелено.
-- **Не запускать `npm run dev` для UI-проверок** — он поднимет Electron окно. Используй
-  `preview_start name="vite"` (или вручную `npm run dev:vite`) и кликай через
-  `data-testid`.
-- **Defensive defaults** — в утилитах вроде `applySlippage` cfg может быть `undefined`
-  (старый persist-снапшот). Падать нельзя — возвращать refPrice без slippage.
+- **Единая точка отправки ордера** — `venue.placeOrder()` из
+  `src/lib/execution/router.ts`. Никто не дёргает `paperEngine` напрямую.
+- **Свечи: `time` в UTC-секундах**, не миллисекундах.
+- **Стратегия не видит будущего.** `ctx.history` обрезана курсором, попытка
+  прочитать бар после текущего возвращает undefined. Индикаторы считаются
+  только по этому окну.
+- **Рыночный ордер исполняется по открытию следующего бара**, не по закрытию
+  текущего. Решение принимается на закрытом баре, его цена уже известна.
+- **Стоп и цель обязаны быть `reduceOnly`** — иначе бар, задевающий оба уровня,
+  откроет фантомную позицию в обратную сторону.
+- **Модели издержек применяются только при явном объявлении.** Молчаливое
+  включение изменило бы смысл прошлых прогонов.
+- **Bybit live mainnet — никогда автоматически.** Только руками пользователя.
+- **Стиль кода** — без эмодзи, без избыточных комментариев. Тест рядом с
+  исходником: `foo.ts` → `foo.test.ts`.
 
-## Как тестировать изменения
+## Тесты
 
-Три слоя — выбирай по тому, что правил.
+`npm test` — vitest, около 1600 тестов, должно быть зелено. Конфиг исключает
+`.claude/worktrees`, иначе рабочие копии агентов удваивают счётчик.
 
-### 1. Чистые функции — Vitest (`npm test`)
+Правишь `src/lib/{indicators,execution,paper,bots,research,data}` — сначала
+тест, потом код.
 
-Индикаторы, исполнение, расчёты комиссий/slippage, утилиты форматирования и т.п.
-Файлы рядом с исходником: `foo.ts` → `foo.test.ts`.
+UI проверяется через `npm run dev:vite` (порт 5173) и `data-testid`.
+**Не запускай `npm run dev`** для проверок — он поднимает окно Electron.
 
-Покрытие на сегодня:
-- `src/lib/indicators/{sma,ema,rsi,atr,stochastic,fractals}.test.ts`
-- `src/lib/execution/slippage.test.ts`
+## Если работает параллельная сессия
 
-Если правишь что-то из `src/lib/indicators/`, `src/lib/execution/`, `src/lib/paper/`,
-`src/lib/bots/` — **сначала допиши/обнови тест, потом гоняй `npm test`.**
-Без UI это занимает <1с и ловит регрессии раньше любого preview.
-
-### 2. UI / React-компоненты — Claude Preview
-
-Vite dev-сервер на `http://localhost:5173`. Поднимать через `preview_start name="vite"`
-(см. [`.claude/launch.json`](.claude/launch.json)),
-проверять через `preview_click` / `preview_fill` / `preview_snapshot`.
-Скриншот делать в самом конце для пруфа пользователю.
-
-Сценарии: открытие диалогов, выбор символа/таймфрейма, добавление индикаторов и рисований,
-работа бот-конфигов, сохранение/загрузка layout, persist в `localStorage` через `preview_eval`.
-
-**Не запускать `npm run dev`** (он поднимает ещё и Electron окно).
-Только `npm run dev:vite` — голый Vite, который умеет preview.
-
-#### data-testid конвенция
-
-Стабильные селекторы вешать через `data-testid`, не через текст или классы.
-Уже размечено (см. компоненты `Toolbar`, `MenuBar`, `Modal`, `SettingsDialog`):
-
-- Toolbar: `tf-{value}` (M1/M5… — value из `TIMEFRAMES`), `layout-{1|2|4}`,
-  `chart-type-{candle|line|area}`, `tool-{cursor|trendline|hline|fib|text}`,
-  `theme-toggle`, `open-indicator-picker`, `open-settings`,
-  `toggle-panel-{orderBook|navigator|terminal}`, `layout-import`, `layout-export`.
-- MenuBar: `menu-{file|view|insert|charts|service|window|help}` + dropdown:
-  `menu-{id}-dropdown`.
-- Modal (через prop `testId`): корневая карточка получает `data-testid={testId}`,
-  крестик — `{testId}-close`, фон — `{testId}-backdrop`.
-- SettingsDialog: модал — `settings-modal`, табы — `settings-tab-{key}`,
-  кнопки внизу — `settings-reset` / `settings-cancel` / `settings-apply`.
-
-Если правишь новый UI-компонент, который надо будет тестировать — вешай `data-testid`
-по тому же стилю (kebab-case, говорящее имя, без префикса `data-`).
-
-### 3. Electron-специфика — пока вручную
-
-Если правишь `electron/main.ts`, `electron/preload.ts`, IPC, нативное меню, packaging —
-автоматически не проверяется. Скажи об этом прямо в ответе и попроси прогнать руками
-через `npm run dev` или `npm run package`.
-
-При необходимости можно добавить Playwright с `_electron.launch()` — но до тех пор,
-пока меняется в основном React-слой, это оверкилл.
-
-### 4. Bybit live API — никогда автоматически
-
-Реальный mainnet — только руками пользователя. Любая trading-логика проверяется через
-`PaperVenue` (`src/lib/execution/PaperVenue.ts`) на синтетических свечах.
-
-## Cheat sheet для новой сессии (TL;DR)
-
-Если открываешь новый чат и нужно быстро ввести Claude в курс — этого хватит:
-
-```
-- Стек: Electron + Vite + React + Zustand + Bybit + lightweight-charts.
-- Чистые функции (indicators / execution / paper / bots): пиши тесты рядом
-  как `foo.test.ts`, прогоняй `npm test`.
-- UI: правишь компонент → `preview_start name="vite"` → клик/snapshot через
-  `data-testid` (список в CLAUDE.md ниже) → скриншот пользователю.
-- Electron-обёртка (electron/main.ts, preload.ts): автотестов нет, проси прогнать
-  `npm run dev` руками.
-- Bybit live mainnet: НИКОГДА автоматически. Только PaperVenue на синтетике.
-- Не запускай `npm run dev` для UI-проверок — он поднимет Electron окно поверх.
-  Используй `npm run dev:vite` или `preview_start name="vite"`.
-- Все ордера — через `venue.placeOrder` из `src/lib/execution/router.ts`.
-  Никто не дёргает paperEngine напрямую.
-```
-
-## Стек / соглашения
-
-- TypeScript strict, ESM.
-- Состояние: Zustand, persist через `partialize` (см. `src/lib/store.ts`, `src/lib/settings.ts`).
-  При изменении формы `Settings` помни про deep-merge при rehydrate (коммит `aa9a29e`).
-- Свечи: `time` в **UTC-секундах**, совместимо с lightweight-charts.
-- Исполнение: абстракция `ExecutionVenue` + `VenueRouter` (`src/lib/execution/`).
-  Реальные ордера на Bybit — отдельная веха, пока только Paper.
-- Стиль кода: без избыточных комментариев, без эмодзи. Имя файла-теста = имя исходника + `.test.ts`.
+Проект большой, и над ним нередко работают несколько агентов сразу. Перед
+правкой общих файлов (`src/lib/bots/registry.ts`, `package.json`,
+`src/lib/research/featureLib.ts`) перечитывай их непосредственно перед
+изменением и добавляй только своё. Перед коммитом смотри `git status` — в
+дереве может лежать чужая незакоммиченная работа.
